@@ -80,29 +80,29 @@ const runners = PAIRS.map((base) => new PairRunner({
 function buildStatus(): string {
   const up = Math.round((Date.now() - bootT) / 60000);
   const lines = [
-    `🤖 Signal bot · ${Math.floor(up / 60)}h${String(up % 60).padStart(2, '0')} de fonctionnement · ${DRY_RUN ? 'MODE DRY (console)' : 'Telegram actif'}`,
+    `🤖 Signal bot · ${Math.floor(up / 60)}h${String(up % 60).padStart(2, '0')} uptime · ${DRY_RUN ? 'DRY MODE (console)' : 'Telegram active'}`,
   ];
   for (const r of runners) {
     const s = r.status();
     lines.push(statusLine(r.symbol, s));
-    if (s.lastError) lines.push(`   ⚠️ dernière erreur : ${s.lastError}`);
+    if (s.lastError) lines.push(`   ⚠️ last error: ${s.lastError}`);
   }
   return lines.join('\n');
 }
 
 async function main(): Promise<void> {
-  console.log(`Signal bot — ${runners.length} paire(s) : ${runners.map((r) => r.symbol).join(', ')}`);
-  console.log(`Stratégie : ladder ${override.mtfLadderEnabled ? 'ON' : 'OFF'} · preset Optimisé · warmup ${WARMUP_DAYS}j · catchup ${CATCHUP_DAYS}j`);
-  if (DRY_RUN) console.log('DRY_RUN=1 → messages en console uniquement (pas de Telegram).');
-  else if (!TOKEN || !CHAT_ID) console.warn('⚠️ TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID manquants → messages en console uniquement.');
+  console.log(`Signal bot — ${runners.length} pair(s): ${runners.map((r) => r.symbol).join(', ')}`);
+  console.log(`Strategy: ladder ${override.mtfLadderEnabled ? 'ON' : 'OFF'} · Optimized preset · warmup ${WARMUP_DAYS}d · catchup ${CATCHUP_DAYS}d`);
+  if (DRY_RUN) console.log('DRY_RUN=1 → console messages only (no Telegram).');
+  else if (!TOKEN || !CHAT_ID) console.warn('⚠️ TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID missing → console messages only.');
 
-  // Démarrage séquentiel (pacing Bybit) — les ticks live ne démarrent
-  // qu'une fois la paire prête.
+  // Sequential boot (Bybit pacing) — live ticks start only once each
+  // pair is ready.
   if (TEST_DAYS > 0) {
-    console.log(`MODE TEST : replay des ${TEST_DAYS} derniers jours — tous les événements seront envoyés, puis le bot s'arrêtera.`);
-    telegram.send(`🧪 MODE TEST — replay des ${TEST_DAYS} derniers jours (${runners.map((r) => r.symbol).join(', ')}) : voici TOUS les événements que le bot aurait envoyés. Fin du test juste après.`);
+    console.log(`TEST MODE: replaying the last ${TEST_DAYS} days — all events will be sent, then the bot will stop.`);
+    telegram.send(`🧪 TEST MODE — replaying the last ${TEST_DAYS} days (${runners.map((r) => r.symbol).join(', ')}): here are ALL the events the bot would have sent. Test ends right after.`);
   } else {
-    telegram.send(`🤖 Démarrage du signal bot — ${runners.length} paires : ${runners.map((r) => r.symbol).join(', ')}\nStratégie ladder 15/30m · warmup ${WARMUP_DAYS}j (~${Math.round(runners.length * 2)} min)`);
+    telegram.send(`🤖 Signal bot starting — ${runners.length} pairs: ${runners.map((r) => r.symbol).join(', ')}\nStrategy ladder 15m/30m · warmup ${WARMUP_DAYS}d (~${Math.round(runners.length * 2)} min)`);
   }
   for (const runner of runners) {
     try {
@@ -110,16 +110,16 @@ async function main(): Promise<void> {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[${runner.symbol}] BOOT FAILED:`, msg);
-      telegram.send(`🛑 ${runner.symbol} : échec de démarrage — ${msg}`);
+      telegram.send(`🛑 ${runner.symbol}: boot failed — ${msg}`);
     }
     await new Promise((r) => setTimeout(r, 3000));
   }
 
-  // Mode test : le replay a tout émis — résumé puis arrêt propre.
+  // Test mode: the replay emitted everything — summary then clean stop.
   if (TEST_DAYS > 0) {
     const n = telegram.sentLog.length;
-    telegram.send(`🧪 Fin du test — ${n} message(s) émis au total sur ${TEST_DAYS} jours de replay.`);
-    console.log(`Test terminé : ${n} message(s). Arrêt.`);
+    telegram.send(`🧪 Test over — ${n} message(s) sent across ${TEST_DAYS} days of replay.`);
+    console.log(`Test finished: ${n} message(s). Stopping.`);
     setTimeout(() => process.exit(0), 5000);
     return;
   }
@@ -144,7 +144,7 @@ async function main(): Promise<void> {
     setInterval(() => {
       void telegram.pollCommands((cmd, chat) => {
         if (cmd === '/start' || cmd === '/help') {
-          void telegram.reply(chat, `🤖 Signal bot opérationnel.\nVotre chat id : ${chat}\nCommandes : /ping · /status`);
+          void telegram.reply(chat, `🤖 Signal bot operational.\nYour chat id: ${chat}\nCommands: /ping · /status`);
         } else if (cmd === '/ping') {
           void telegram.reply(chat, '🏓 pong');
         } else if (cmd === '/status') {
@@ -154,7 +154,7 @@ async function main(): Promise<void> {
     }, 3000);
   }
 
-  console.log('Boucle live démarrée.');
+  console.log('Live loop started.');
 }
 
 process.on('uncaughtException', (err) => {

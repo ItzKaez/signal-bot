@@ -125,7 +125,7 @@ export class PairRunner {
     const snap = this.engine.getSnapshot(this.base1m[this.base1m.length - 1]?.close ?? null);
     const nPos = (snap.positions ?? []).length;
     say(`prêt · ${snap.pendingPlans.length} setup(s) en file · ${nPos} position(s) reconstruite(s)`);
-    this.opts.telegram.send(`✅ ${symbol} en ligne · ${snap.pendingPlans.length} setup(s) en file · ${nPos} position(s)`);
+    this.opts.telegram.send(`✅ ${symbol} online · ${snap.pendingPlans.length} setup(s) queued · ${nPos} position(s)`);
   }
 
   // ═══════════════ LIVE ═══════════════
@@ -167,7 +167,7 @@ export class PairRunner {
       const today = Math.floor(nowSec / 86400);
       if (today !== this.currentPocDay) {
         this.injectTodayPocs(nowSec);
-        this.opts.telegram.send(`📅 ${this.symbol} · nouveau jour UTC · ${this.pocCount} POCs actifs`);
+        this.opts.telegram.send(`📅 ${this.symbol} · new UTC day · ${this.pocCount} active POCs`);
       }
 
       // 4. Moteur + émission des nouveaux événements. Attention : update()
