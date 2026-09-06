@@ -63,7 +63,9 @@ if (env.SIGNAL_OVERRIDE) {
   }
 }
 
-const telegram = new Telegram(TOKEN, CHAT_ID, DRY_RUN);
+// TEST_DAYS > 0 : Terminal ONLY — the replay burst would hammer Telegram
+// (429 rate limits); test messages go to the console, never sent.
+const telegram = new Telegram(TOKEN, CHAT_ID, DRY_RUN || TEST_DAYS > 0);
 const bootT = Date.now();
 const runners = PAIRS.map((base) => new PairRunner({
   symbol: `${base}${QUOTE}`,
@@ -99,7 +101,7 @@ async function main(): Promise<void> {
   // Sequential boot (Bybit pacing) — live ticks start only once each
   // pair is ready.
   if (TEST_DAYS > 0) {
-    console.log(`TEST MODE: replaying the last ${TEST_DAYS} days — all events will be sent, then the bot will stop.`);
+    console.log(`TEST MODE: replaying the last ${TEST_DAYS} days — all events are printed to THIS terminal only (no Telegram), then the bot stops.`);
     telegram.send(`🧪 TEST MODE — replaying the last ${TEST_DAYS} days (${runners.map((r) => r.symbol).join(', ')}): here are ALL the events the bot would have sent. Test ends right after.`);
   } else {
     telegram.send(`🤖 Signal bot starting — ${runners.length} pairs: ${runners.map((r) => r.symbol).join(', ')}\nStrategy ladder 15m/30m · warmup ${WARMUP_DAYS}d (~${Math.round(runners.length * 2)} min)`);
