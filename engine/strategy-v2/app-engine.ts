@@ -1117,14 +1117,19 @@ export class AppStrategyEngine {
    *  breathe = pas de mèche ici (BE dès profit, mèche réservée à la
    *  cassure de div) ; next_candle/sweep = différée à la bougie suivante. */
   private requestWickArm(position: Position, plan: TradePlan, side: Side, now: number, average: number, candle: Bar, kind: string, site: 'div' | 'invalidation'): void {
-    // BE déjà armé : aucune mèche — le stop BE est PLUS PROCHE que la
-    // mèche dans le sens de la sortie (BE au-dessus de la moyenne pour un
-    // LONG, mèche en-dessous : le prix touche toujours le BE d'abord).
-    if (position.breakeven) return;
     const strat = this.config.wickArmStrategy;
-    const breathing = strat === 'breathe' || strat === 'breathe_next_candle';
+    // 'breathe' court-circuite TOUS les sites (div ET invalidation) — c'est
+    // la sémantique du run validé (OOS +1002\$) : JAMAIS de SL mèche, le
+    // trade respire, BE à la première clôture en profit, hard stop 2×AOI
+    // en filet. 'breathe_next_candle' : breathe sur les sites div + mèche
+    // différée à l'invalidation.
+    if (strat === 'breathe') {
+      position.divLossBeEligible = true;
+      this.log(now, 'wick_breathe', candle.close, undefined, `${kind} · no wick — breathing (hard stop 2×AOI as backstop), BE on first profitable close`);
+      return;
+    }
     const deferring = strat === 'next_candle' || strat === 'sweep' || (strat === 'breathe_next_candle' && site === 'invalidation');
-    if (breathing && site === 'div') {
+    if (strat === 'breathe_next_candle' && site === 'div') {
       position.divLossBeEligible = true;
       this.log(now, 'wick_breathe', candle.close, undefined, `${kind} · no wick — breathing (hard stop 2×AOI as backstop), BE on first profitable close`);
       return;
@@ -1637,6 +1642,11 @@ position.wickStop = position.wickStop === null ? wick : Math.min(position.wickSt
     // breathe : la CASSURE de div est LE moment de la mèche (sans condition
     // de TP) ; next_candle/sweep : différée ici aussi ; standard : gate
     // after_tp1 inchangée pour la cassure de peak.
+    // Porte d'armement à l'invalidation : after_tp1 (porte historique du
+    // preset) ; TOUTE stratégie non-standard l'ouvre — 'breathe' y entre
+    // pour être court-circuitée par requestWickArm (qui pose alors
+    // divLossBeEligible : BE à la première clôture profitable APRÈS la
+    // cassure). Sémantique exacte du run validé (OOS +1002\$).
     const wickGateOpen = this.canArmWickStop(position) || this.config.wickArmStrategy !== 'standard';
     if (invalidation && (this.config.mtfLadderEnabled || wickGateOpen)) {
       // Peak de RÉFÉRENCE cassé (breakout/midline/âge) : SL sur la mèche
