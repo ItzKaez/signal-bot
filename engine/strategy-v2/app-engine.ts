@@ -1141,7 +1141,7 @@ export class AppStrategyEngine {
     const wick = this.adverseWickStop(side, plan, position.referencePeakAt, average, now);
 position.wickStop = position.wickStop === null ? wick : (side === 'LONG' ? Math.max(position.wickStop, wick) : Math.min(position.wickStop, wick));
     position.protectiveStopFrom = now;
-    this.log(now, 'sl_wick', wick, undefined, `${kind} · SL on adverse wick (${wick.toFixed(1)}) · active next candle · BE on first profitable close`);
+    this.log(now, 'sl_wick', wick, undefined, `${kind} · SL on adverse wick (${wick >= 100 ? wick.toFixed(1) : wick.toFixed(4)}) · active next candle · BE on first profitable close`);
   }
 
   /** Une descente est-elle POSSIBLE pour ce setup surveillé ? Il faut la
@@ -1489,7 +1489,7 @@ position.wickStop = position.wickStop === null ? wick : (side === 'LONG' ? Math.
 position.wickStop = position.wickStop === null ? wick : Math.max(position.wickStop, wick);
               position.protectiveStopFrom = now;
               position.wickArmPending = null;
-              this.log(now, 'sl_wick', wick, undefined, `sweep wick armed (${wick.toFixed(1)}) — swept ${pending.breakExtreme.toFixed(1)}, reaction closed ${candle.close.toFixed(1)} · active next candle · BE on first profitable close`);
+              this.log(now, 'sl_wick', wick, undefined, `sweep wick armed (${wick.toFixed(1)}) — swept ${pending.breakExtreme.toFixed(1)}, reaction closed ${candle.close >= 100 ? candle.close.toFixed(1) : candle.close.toFixed(4)} · active next candle · BE on first profitable close`);
             }
           } else {
             if (candle.high > pending.sweepExtreme) pending.sweepExtreme = candle.high;
@@ -1498,7 +1498,7 @@ position.wickStop = position.wickStop === null ? wick : Math.max(position.wickSt
 position.wickStop = position.wickStop === null ? wick : Math.min(position.wickStop, wick);
               position.protectiveStopFrom = now;
               position.wickArmPending = null;
-              this.log(now, 'sl_wick', wick, undefined, `sweep wick armed (${wick.toFixed(1)}) — swept ${pending.breakExtreme.toFixed(1)}, reaction closed ${candle.close.toFixed(1)} · active next candle · BE on first profitable close`);
+              this.log(now, 'sl_wick', wick, undefined, `sweep wick armed (${wick.toFixed(1)}) — swept ${pending.breakExtreme.toFixed(1)}, reaction closed ${candle.close >= 100 ? candle.close.toFixed(1) : candle.close.toFixed(4)} · active next candle · BE on first profitable close`);
             }
           }
         }
@@ -1515,7 +1515,7 @@ position.wickStop = position.wickStop === null ? wick : Math.min(position.wickSt
         position.breakevenLevel = this.beArmLevel(side, average, candle.close);
         position.protectiveStopFrom = now;
         this.cancelRemainingLimitsAtBe(now, plan, position);
-        this.log(now, 'breakeven_enabled', position.breakevenLevel, undefined, `breathing div at a loss paid off · profitable close · stop at ${position.breakevenLevel.toFixed(1)} (active next candle)`);
+        this.log(now, 'breakeven_enabled', position.breakevenLevel, undefined, `breathing div at a loss paid off · profitable close · stop at ${position.breakevenLevel >= 100 ? position.breakevenLevel.toFixed(1) : position.breakevenLevel.toFixed(4)} (active next candle)`);
       }
     }
 
@@ -1550,7 +1550,7 @@ position.wickStop = position.wickStop === null ? wick : Math.min(position.wickSt
           position.breakevenLevel = this.beArmLevel(side, average, candle.close);
           position.protectiveStopFrom = now;
           this.cancelRemainingLimitsAtBe(now, plan, position);
-          this.log(now, 'breakeven_enabled', position.breakevenLevel, undefined, `3 drives (div extreme still in zone, RSI ${position.lastDivEndRsi!.toFixed(1)}) · fully filled · stop at ${position.breakevenLevel.toFixed(1)} (active next candle)`);
+          this.log(now, 'breakeven_enabled', position.breakevenLevel, undefined, `3 drives (div extreme still in zone, RSI ${position.lastDivEndRsi!.toFixed(1)}) · fully filled · stop at ${position.breakevenLevel >= 100 ? position.breakevenLevel.toFixed(1) : position.breakevenLevel.toFixed(4)} (active next candle)`);
         } else if (!inProfit && this.config.wickStopMode !== 'off') {
           // Div confirmée en LOSS (3 drives) : SL sur la mèche adverse
           // TOUJOURS — la politique wickStopMode after_tp1 ne s'applique
@@ -1572,7 +1572,7 @@ position.wickStop = position.wickStop === null ? wick : Math.min(position.wickSt
         position.breakevenLevel = this.beArmLevel(side, average, candle.close);
         position.protectiveStopFrom = now;
         this.cancelRemainingLimitsAtBe(now, plan, position);
-        this.log(now, 'breakeven_enabled', position.breakevenLevel, undefined, `final divergence confirmed in profit · stop at ${position.breakevenLevel.toFixed(1)}${position.breakevenLevel !== average ? ' (frais couverts)' : ' (moyenne)'} (active next candle)`);
+        this.log(now, 'breakeven_enabled', position.breakevenLevel, undefined, `final divergence confirmed in profit · stop at ${position.breakevenLevel >= 100 ? position.breakevenLevel.toFixed(1) : position.breakevenLevel.toFixed(4)}${position.breakevenLevel !== average ? ' (frais couverts)' : ' (moyenne)'} (active next candle)`);
       } else if (this.config.wickStopMode !== 'off') {
         // Div FINALE confirmée en LOSS : SL sur la mèche adverse TOUJOURS
         // (cap 2×AOI de la moyenne) — pas de condition TP1 ici non plus.
@@ -1593,7 +1593,7 @@ position.wickStop = position.wickStop === null ? wick : Math.min(position.wickSt
         position.breakevenLevel = this.beArmLevel(side, average, candle.close);
         position.protectiveStopFrom = now;
         this.cancelRemainingLimitsAtBe(now, plan, position);
-        this.log(now, 'breakeven_enabled', position.breakevenLevel, undefined, `profitable close after wick SL · stop at ${position.breakevenLevel.toFixed(1)}${position.breakevenLevel !== average ? ' (frais couverts)' : ' (moyenne)'} (active next candle)`);
+        this.log(now, 'breakeven_enabled', position.breakevenLevel, undefined, `profitable close after wick SL · stop at ${position.breakevenLevel >= 100 ? position.breakevenLevel.toFixed(1) : position.breakevenLevel.toFixed(4)}${position.breakevenLevel !== average ? ' (frais couverts)' : ' (moyenne)'} (active next candle)`);
       }
     }
     // ─── BE ÉCHELLE — UPGRADE (mode profit_close) ───
@@ -1631,7 +1631,7 @@ position.wickStop = position.wickStop === null ? wick : Math.min(position.wickSt
         position.breakevenLevel = this.beArmLevel(side, average, candle.close);
         position.protectiveStopFrom = now;
         this.cancelRemainingLimitsAtBe(now, plan, position);
-        this.log(now, 'breakeven_enabled', position.breakevenLevel, undefined, `invalidation (${invalidation.reason}) in profit · stop at ${position.breakevenLevel.toFixed(1)}${position.breakevenLevel !== average ? ' (frais couverts)' : ' (moyenne)'} (active next candle)`);
+        this.log(now, 'breakeven_enabled', position.breakevenLevel, undefined, `invalidation (${invalidation.reason}) in profit · stop at ${position.breakevenLevel >= 100 ? position.breakevenLevel.toFixed(1) : position.breakevenLevel.toFixed(4)}${position.breakevenLevel !== average ? ' (frais couverts)' : ' (moyenne)'} (active next candle)`);
       }
     }
     // breathe : la CASSURE de div est LE moment de la mèche (sans condition
@@ -1666,7 +1666,7 @@ position.wickStop = position.wickStop === null ? wick : Math.min(position.wickSt
     const adverseClose = side === 'LONG' ? candle.close < forcedLevel : candle.close > forcedLevel;
     position.adverseCloses = adverseClose && !position.breakeven ? position.adverseCloses + 1 : 0;
     if (position.adverseCloses > 0) {
-      this.log(now, 'adverse_close', candle.close, undefined, `${position.adverseCloses} close(s) beyond 2×AOI (${forcedLevel.toFixed(1)})`);
+      this.log(now, 'adverse_close', candle.close, undefined, `${position.adverseCloses} close(s) beyond 2×AOI (${forcedLevel >= 100 ? forcedLevel.toFixed(1) : forcedLevel.toFixed(4)})`);
     }
 
     // Stop protecteur (BE ou mèche) : jugé sur l'état AU DÉBUT de la bougie
@@ -1769,7 +1769,7 @@ position.wickStop = position.wickStop === null ? wick : Math.min(position.wickSt
         // sortir la position entière à un stop calibré sur l'ancienne
         // moyenne).
         this.cancelRemainingLimitsAtBe(now, plan, position);
-        this.log(now, 'breakeven_enabled', position.breakevenLevel, undefined, `TP hit · stop at ${position.breakevenLevel.toFixed(1)} (active next candle)${position.breakevenLevel !== average ? ' · frais couverts' : ''}`);
+        this.log(now, 'breakeven_enabled', position.breakevenLevel, undefined, `TP hit · stop at ${position.breakevenLevel >= 100 ? position.breakevenLevel.toFixed(1) : position.breakevenLevel.toFixed(4)} (active next candle)${position.breakevenLevel !== average ? ' · frais couverts' : ''}`);
       }
     }
     if (position.remainingSize <= 1e-12) {
