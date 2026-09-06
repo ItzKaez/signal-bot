@@ -1441,12 +1441,18 @@ position.wickStop = position.wickStop === null ? wick : (side === 'LONG' ? Math.
         }
         // inProfit sans fullyFilled : on garde le stop courant — les DCA en
         // attente peuvent encore se remplir au-dessus et améliorer la moyenne.
-      } else if (inProfit && !activeWickTouched) {
+      } else if (inProfit && fullyFilled && !activeWickTouched) {
         position.breakeven = true;
         position.breakevenLevel = this.beArmLevel(side, average, candle.close);
         position.protectiveStopFrom = now;
         this.cancelRemainingLimitsAtBe(now, plan, position);
         this.log(now, 'breakeven_enabled', position.breakevenLevel, undefined, `final divergence confirmed in profit · stop at ${position.breakevenLevel.toFixed(1)}${position.breakevenLevel !== average ? ' (frais couverts)' : ' (moyenne)'} (active next candle)`);
+      } else if (inProfit && !fullyFilled) {
+        // Div FINALE confirmée en profit mais DCAs restantes : JAMAIS de BE
+        // tant qu'il reste des limites (règle : BE seulement si div sans 3d
+        // + profit + plus de DCA). On garde les limites posées — le hard
+        // stop 2×AOI reste le filet pendant qu'on attend les fills.
+        this.log(now, 'be_deferred', candle.close, undefined, 'final divergence confirmed in profit · DCAs still pending · no BE — waiting for fills (hard stop as backstop)');
       } else if (this.config.mtfLadderEnabled || this.canArmWickStop(position)) {
         // En loss : SL sur la mèche adverse depuis le peak de référence
         // (cap 2×AOI de la moyenne).

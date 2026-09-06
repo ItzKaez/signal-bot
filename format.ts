@@ -75,6 +75,9 @@ const EVENT_EMOJI: Record<string, string> = {
   ladder_downgrade: '⬇️',
   ladder_downgrade_late: '⬇️',
   ladder_await_downgrade: 'ℹ️',
+  reference_peak_moved: '⛓',
+  adverse_close: '⚠️',
+  be_deferred: '⏳',
 };
 
 /** Title + explanation per event type (what happens / the action). */
@@ -118,6 +121,18 @@ const EVENT_TEXT: Record<string, { title: string; explain: string }> = {
   ladder_await_downgrade: {
     title: 'AWAITING DOWNGRADE',
     explain: 'Watched setup invalidated with no lower candidate available: staying in the trade, hard stop 2×AOI as backstop.',
+  },
+  reference_peak_moved: {
+    title: '3 DRIVES CHAIN',
+    explain: 'A new same-side peak extends the setup (3 drives): divergences are now judged from this new reference peak — DCAs stay in place, hoping for fills during the divergence.',
+  },
+  adverse_close: {
+    title: 'ADVERSE CLOSES',
+    explain: 'Consecutive close(s) beyond 2×AOI — forced exit is approaching if the price keeps closing against the trade.',
+  },
+  be_deferred: {
+    title: 'BE DEFERRED',
+    explain: 'Final divergence confirmed in profit but DCAs are still pending: NO break-even yet — limits stay in place waiting for fills, hard stop 2×AOI as backstop.',
   },
 };
 
