@@ -151,6 +151,17 @@ export interface StrategyV2Config {
    *  1m/5m il faudra 30m déjà OB/OS (règle 5, ladderLowTfZoneGated) ET une
    *  zone à forte confluence de liquidité (gros volume POC). */
   ladderEntryTfCount: number;
+  /** Stratégie de POSE du SL mèche : 'standard' (à la clôture de l'événement,
+   *  mèche jusqu'à cette bougie) ; 'breathe' (div en loss : PAS de mèche, le
+   *  trade respire — BE à la première clôture en profit, mèche uniquement à
+   *  la cassure réelle de la div, sans condition de TP) ; 'next_candle' (la
+   *  mèche se pose à la bougie SUIVANTE — on ne se fait pas sortir par la
+   *  mèche de la bougie cassante) ; 'sweep' (la bougie suivante doit SWEEPER
+   *  l'extrême de la cassure puis réagir — le SL va sur la mèche du sweep ;
+   *  sinon on attend, hard stop en filet) ; 'breathe_next_candle' (A+B :
+   *  breathe sur la div en loss + mèche de la cassure posée à la bougie
+   *  SUIVANTE — les deux leviers sont indépendants). */
+  wickArmStrategy: 'standard' | 'breathe' | 'next_candle' | 'sweep' | 'breathe_next_candle';
   /** Agrégation de la liquidité de ZONE (filtre minPocConcentration) :
    *  'sum' = somme des concentrations du groupe (volume total de l'étagère),
    *  'avg' = moyenne (densité typique), 'max' = le meilleur POC de la zone. */
@@ -251,6 +262,7 @@ export function buildConfig(baseIntervalSeconds: number): StrategyV2Config {
     ladderEntryTfCount: 2,
     ladderDowngradeEnabled: true,
     pocZoneAgg: 'sum',
+    wickArmStrategy: 'standard',
     maxRsiExtremity: 100,
     maxEntryLevels: 0,
   };

@@ -66,6 +66,12 @@ interface Position {
    *  peaks inférieurs formés par le mouvement adverse entrent au pool
    *  quelques minutes plus tard). Hard stop 2×AOI en filet permanent. */
   ladderInvalidated?: boolean;
+  /** Stratégie de mèche différée : armement PENDANT (next_candle/sweep) —
+   *  posé à la clôture d'une bougie ultérieure. */
+  wickArmPending?: { since: number; mode: 'next' | 'sweep'; breakExtreme: number; sweepExtreme?: number } | null;
+  /** breathe : div confirmée en loss sans mèche — BE dès la première
+   *  clôture en profit. */
+  divLossBeEligible?: boolean;
   /** SL posé sur la mèche adverse quand une div se confirme en loss —
    *  BE dès qu'une clôture repasse en profit. */
   wickStop: number | null;
@@ -1107,6 +1113,33 @@ export class AppStrategyEngine {
     return true;
   }
 
+  /** Pose le SL mèche selon wickArmStrategy : standard = immédiat ;
+   *  breathe = pas de mèche ici (BE dès profit, mèche réservée à la
+   *  cassure de div) ; next_candle/sweep = différée à la bougie suivante. */
+  private requestWickArm(position: Position, plan: TradePlan, side: Side, now: number, average: number, candle: Bar, kind: string, site: 'div' | 'invalidation'): void {
+    const strat = this.config.wickArmStrategy;
+    const breathing = strat === 'breathe' || strat === 'breathe_next_candle';
+    const deferring = strat === 'next_candle' || strat === 'sweep' || (strat === 'breathe_next_candle' && site === 'invalidation');
+    if (breathing && site === 'div') {
+      position.divLossBeEligible = true;
+      this.log(now, 'wick_breathe', candle.close, undefined, `${kind} · no wick — breathing (hard stop 2×AOI as backstop), BE on first profitable close`);
+      return;
+    }
+    if (deferring) {
+      position.wickArmPending = {
+        since: now,
+        mode: strat === 'next_candle' ? 'next' : 'sweep',
+        breakExtreme: side === 'LONG' ? candle.low : candle.high,
+      };
+      this.log(now, 'wick_pending', candle.close, undefined, `${kind} · wick arm deferred to the next candle (${strat})`);
+      return;
+    }
+    const wick = this.adverseWickStop(side, plan, position.referencePeakAt, average, now);
+position.wickStop = position.wickStop === null ? wick : (side === 'LONG' ? Math.max(position.wickStop, wick) : Math.min(position.wickStop, wick));
+    position.protectiveStopFrom = now;
+    this.log(now, 'sl_wick', wick, undefined, `${kind} · SL on adverse wick (${wick.toFixed(1)}) · active next candle · BE on first profitable close`);
+  }
+
   /** Une descente est-elle POSSIBLE pour ce setup surveillé ? Il faut la
    *  cascade activée ET au moins un TF d'exécution sous le TF surveillé —
    *  sinon l'« attente de descente » n'aurait aucun sens (rien ne peut
@@ -1413,6 +1446,75 @@ export class AppStrategyEngine {
     const activeWickTouched = activeAtOpen && wickAtOpen !== null &&
       (side === 'LONG' ? candle.low <= wickAtOpen : candle.high >= wickAtOpen);
 
+    // ─── Armement de mèche DIFFÉRÉ (wickArmStrategy next_candle/sweep) ───
+    // Une demande posée à une bougie précédente se traite à CETTE clôture :
+    //  · next : mèche depuis le peak JUSQU'À cette bougie (la bougie qui
+    //    suit la cassure a formé sa propre mèche — on ne se fait plus
+    //    sortir par la mèche de la bougie cassante elle-même) ;
+    //  · sweep : seulement si cette bougie a SWEEPÉ l'extrême de la bougie
+    //    cassante PUIS réagi (clôture revenue au-delà) — le SL va sur la
+    //    mèche du sweep. Pas de sweep/réaction → on attend encore (hard
+    //    stop 2×AOI en filet permanent).
+    const pendingArm = position.wickArmPending;
+    if (pendingArm != null && position.wickStop === null) {
+      {
+        const pending = pendingArm;
+        if (now > pending.since) {
+        const cap = side === 'LONG'
+          ? average * (1 - this.config.fallbackStopCapAoiMultiple * plan.aoiPct)
+          : average * (1 + this.config.fallbackStopCapAoiMultiple * plan.aoiPct);
+        if (pending.mode === 'next') {
+          const wick = this.adverseWickStop(side, plan, position.referencePeakAt, average, now);
+position.wickStop = position.wickStop === null ? wick : (side === 'LONG' ? Math.max(position.wickStop, wick) : Math.min(position.wickStop, wick));
+          position.protectiveStopFrom = now;
+          position.wickArmPending = null;
+          this.log(now, 'sl_wick', wick, undefined, `wick armed on the candle AFTER the break (${wick.toFixed(1)}) · active next candle · BE on first profitable close`);
+        } else {
+          // SWEEP À ÉTATS (résolution de la base — 1m au bot) : 1) une
+          // bougie PERCE l'extrême de cassure (le sweep, extrême accumulé
+          // tant qu'on creuse) ; 2) une clôture REVIENT au-delà du niveau
+          // de cassure = réaction claire dans notre sens — le SL va sur
+          // l'extrême du sweep. Pas de réaction → on attend (hard stop en
+          // filet). Tout doit se produire dans la foulée immédiate de la
+          // cassure.
+          if (pending.sweepExtreme === undefined) pending.sweepExtreme = pending.breakExtreme;
+          if (side === 'LONG') {
+            if (candle.low < pending.sweepExtreme) pending.sweepExtreme = candle.low;
+            if (candle.close > pending.breakExtreme) {
+              const wick = Math.max(pending.sweepExtreme, cap);
+position.wickStop = position.wickStop === null ? wick : Math.max(position.wickStop, wick);
+              position.protectiveStopFrom = now;
+              position.wickArmPending = null;
+              this.log(now, 'sl_wick', wick, undefined, `sweep wick armed (${wick.toFixed(1)}) — swept ${pending.breakExtreme.toFixed(1)}, reaction closed ${candle.close.toFixed(1)} · active next candle · BE on first profitable close`);
+            }
+          } else {
+            if (candle.high > pending.sweepExtreme) pending.sweepExtreme = candle.high;
+            if (candle.close < pending.breakExtreme) {
+              const wick = Math.min(pending.sweepExtreme, cap);
+position.wickStop = position.wickStop === null ? wick : Math.min(position.wickStop, wick);
+              position.protectiveStopFrom = now;
+              position.wickArmPending = null;
+              this.log(now, 'sl_wick', wick, undefined, `sweep wick armed (${wick.toFixed(1)}) — swept ${pending.breakExtreme.toFixed(1)}, reaction closed ${candle.close.toFixed(1)} · active next candle · BE on first profitable close`);
+            }
+          }
+        }
+      }
+      }
+    }
+    // ─── breathe : div confirmée en loss SANS mèche — le trade respire
+    // jusqu'à la première clôture en profit (BE frais-couverts) ou la
+    // cassure réelle de la div (mèche à l'invalidation).
+    if (position.divLossBeEligible && !position.breakeven) {
+      const inProfitNow = side === 'LONG' ? candle.close > average : candle.close < average;
+      if (inProfitNow && !activeWickTouched) {
+        position.breakeven = true;
+        position.breakevenLevel = this.beArmLevel(side, average, candle.close);
+        position.protectiveStopFrom = now;
+        this.cancelRemainingLimitsAtBe(now, plan, position);
+        this.log(now, 'breakeven_enabled', position.breakevenLevel, undefined, `breathing div at a loss paid off · profitable close · stop at ${position.breakevenLevel.toFixed(1)} (active next candle)`);
+      }
+    }
+
     // ─── Stop à la confirmation de divergence (mode on_divergence) ───
     // Div confirmée = une bougie a clôturé dans notre sens, position remplie :
     //  · en profit → BE immédiat (moyenne).
@@ -1453,10 +1555,7 @@ export class AppStrategyEngine {
           // clôture repasse en profit (bloc dédié ci-dessous). En LADDER
           // avec cascade active, la descente se tente d'abord.
           if (!this.tryLadderDowngrade(position, now, candle.close)) {
-            const wick = this.adverseWickStop(side, plan, position.referencePeakAt, average, now);
-position.wickStop = position.wickStop === null ? wick : (side === 'LONG' ? Math.max(position.wickStop, wick) : Math.min(position.wickStop, wick));
-            position.protectiveStopFrom = now;
-            this.log(now, 'sl_wick', wick, undefined, `3 drives confirmed at a loss · SL on adverse wick (${wick.toFixed(1)}) · active next candle · BE on first profitable close`);
+            this.requestWickArm(position, plan, side, now, average, candle, '3 drives confirmed at a loss', 'div');
           }
         }
         // inProfit sans fullyFilled : on garde le stop courant — les DCA en
@@ -1475,10 +1574,7 @@ position.wickStop = position.wickStop === null ? wick : (side === 'LONG' ? Math.
         // (cap 2×AOI de la moyenne) — pas de condition TP1 ici non plus.
         // BE dès qu'une clôture repasse en profit.
         if (!this.tryLadderDowngrade(position, now, candle.close)) {
-          const wick = this.adverseWickStop(side, plan, position.referencePeakAt, average, now);
-position.wickStop = position.wickStop === null ? wick : (side === 'LONG' ? Math.max(position.wickStop, wick) : Math.min(position.wickStop, wick));
-          position.protectiveStopFrom = now;
-          this.log(now, 'sl_wick', wick, undefined, `div confirmed at a loss · SL on adverse wick (${wick.toFixed(1)}) · active next candle · BE on first profitable close`);
+          this.requestWickArm(position, plan, side, now, average, candle, 'div confirmed at a loss', 'div');
         }
       }
     }
@@ -1534,22 +1630,20 @@ position.wickStop = position.wickStop === null ? wick : (side === 'LONG' ? Math.
         this.log(now, 'breakeven_enabled', position.breakevenLevel, undefined, `invalidation (${invalidation.reason}) in profit · stop at ${position.breakevenLevel.toFixed(1)}${position.breakevenLevel !== average ? ' (frais couverts)' : ' (moyenne)'} (active next candle)`);
       }
     }
-    if (invalidation && (this.config.mtfLadderEnabled || this.canArmWickStop(position))) {
-      // Peak de RÉFÉRENCE cassé (breakout/midline/âge) : même règle que la
-      // div confirmée en loss — SL sur la mèche adverse depuis le peak de
-      // référence (cap 2×AOI), BE dès qu'une clôture est en profit. En
-      // LADDER la descente se tente SANS condition de TP.
+    // breathe : la CASSURE de div est LE moment de la mèche (sans condition
+    // de TP) ; next_candle/sweep : différée ici aussi ; standard : gate
+    // after_tp1 inchangée pour la cassure de peak.
+    const wickGateOpen = this.canArmWickStop(position) || this.config.wickArmStrategy !== 'standard';
+    if (invalidation && (this.config.mtfLadderEnabled || wickGateOpen)) {
+      // Peak de RÉFÉRENCE cassé (breakout/midline/âge) : SL sur la mèche
+      // adverse depuis le peak de référence (cap 2×AOI), BE dès qu'une
+      // clôture est en profit. En LADDER la descente se tente d'abord.
       if (!this.tryLadderDowngrade(position, now, candle.close)) {
-        if (this.canArmWickStop(position)) {
-          const wick = this.adverseWickStop(side, plan, position.referencePeakAt, average, now);
-position.wickStop = position.wickStop === null ? wick : (side === 'LONG' ? Math.max(position.wickStop, wick) : Math.min(position.wickStop, wick));
-          position.protectiveStopFrom = now;
-          this.log(now, 'sl_wick', wick, undefined, `reference peak broken (${invalidation.reason}) · SL on wick (${wick.toFixed(1)}) · active next candle · BE on first profitable close`);
-        } else {
-          if (this.ladderDowngradePossible(position)) {
-            position.ladderInvalidated = true;
-            this.log(now, 'ladder_await_downgrade', candle.close, undefined, `reference peak broken (${invalidation.reason}) · no lower setup available yet · watching for one (hard stop as backstop)`);
-          }
+        if (wickGateOpen) {
+          this.requestWickArm(position, plan, side, now, average, candle, `reference peak broken (${invalidation.reason})`, 'invalidation');
+        } else if (this.ladderDowngradePossible(position)) {
+          position.ladderInvalidated = true;
+          this.log(now, 'ladder_await_downgrade', candle.close, undefined, `reference peak broken (${invalidation.reason}) · no lower setup available yet · watching for one (hard stop as backstop)`);
         }
       }
     }
