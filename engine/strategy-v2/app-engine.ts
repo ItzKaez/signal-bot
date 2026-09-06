@@ -18,7 +18,7 @@ import { buildConfig, type StrategyV2Config } from './config';
 import { ladderTfs, findUpgrade, findDowngrade, type LadderCandidate } from './mtf-ladder';
 import { resampleCloseTime, type Bar, type Side } from './peaks';
 import { atrWilderSeries } from './aoi';
-import { planTrade, isTwin, extendAoiToPocGroups, type TradePlan } from './plans';
+import { planTrade, isTwin, extendAoiToPocGroups, groupLevels, type TradePlan } from './plans';
 import { selectFibonacciDiag } from './fib';
 import { RsiPeaksLiveFrame, ResampledCompletedFeeder, type LiveEvent } from './rsipeaks-live';
 import type { Candle } from '../types';
@@ -674,18 +674,33 @@ export class AppStrategyEngine {
     }
     const entryPoc = candidates.reduce((best, level) => (Math.abs(level - peak.peakPrice) < Math.abs(best - peak.peakPrice) ? level : best));
 
-    // CONFLUENCE LIQUIDITE / TF : meta du POC d'entree depuis SON profil
-    // d'origine (conc = part du volume de sa periode dans son bin, tfSec =
-    // TF qui l'a cree) - valeurs reelles emises par l'indicateur MTF POC.
+    // CONFLUENCE LIQUIDITE DE ZONE / TF : la liquidite se juge sur le
+    // GROUPE de POCs autour de l'entree (l'etagere, meme groupement que les
+    // DCA - minPocGroupSpacingPct), pas sur le seul POC le plus proche :
+    // un POC dense un peu plus loin dans la meme zone rend le setup valide
+    // (retour utilisateur : quand je parle de liquidite c'est DANS LA ZONE,
+    // pas 1 POC en particulier). conc de chaque niveau = part du volume de
+    // SON profil d'origine ; la zone = SOMME des membres du groupe.
     // POC sans meta (cache ancien) : passe.
     const pocMeta = this.storePocMeta.get(entryPoc);
-    if (pocMeta !== undefined) {
-      if (this.config.minPocConcentration > 0 && pocMeta.conc < this.config.minPocConcentration) {
-        this.debug.plansRejected++;
-        this.log(peak.confirmedAt, 'peak_rejected', peak.peakPrice, undefined,
-          `${peak.side} TF ${peak.executionSeconds / 60}min · rejected: entry POC liquidity thin (conc ${(pocMeta.conc * 100).toFixed(1)}% < ${(this.config.minPocConcentration * 100).toFixed(1)}%)`);
-        return;
+    if (this.config.minPocConcentration > 0) {
+      const zoneGroups = groupLevels(candidates, this.config.minPocGroupSpacingPct);
+      const entryGroup = zoneGroups.find((g) => g.includes(entryPoc)) ?? [entryPoc];
+      const zoneMetas = entryGroup
+        .map((lvl) => this.storePocMeta.get(lvl))
+        .filter((m): m is { conc: number; tfSec: number } => m !== undefined);
+      if (zoneMetas.length > 0) {
+        const zoneConc = zoneMetas.reduce((sum, m) => sum + m.conc, 0);
+        const bestConc = Math.max(...zoneMetas.map((m) => m.conc));
+        if (zoneConc < this.config.minPocConcentration) {
+          this.debug.plansRejected++;
+          this.log(peak.confirmedAt, 'peak_rejected', peak.peakPrice, undefined,
+            `${peak.side} TF ${peak.executionSeconds / 60}min · rejected: entry ZONE liquidity thin (zone conc ${(zoneConc * 100).toFixed(1)}% over ${entryGroup.length} POC(s), best ${(bestConc * 100).toFixed(1)}% < ${(this.config.minPocConcentration * 100).toFixed(1)}%)`);
+          return;
+        }
       }
+    }
+    if (pocMeta !== undefined) {
       if (this.config.minPocTfSec > 0 && pocMeta.tfSec < this.config.minPocTfSec) {
         this.debug.plansRejected++;
         this.log(peak.confirmedAt, 'peak_rejected', peak.peakPrice, undefined,
