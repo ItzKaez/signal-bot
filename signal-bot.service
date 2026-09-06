@@ -1,11 +1,16 @@
 [Unit]
-Description=Trading Helper — Signal Bot (Peak/POC/Fib ladder, Telegram)
+Description=Signal Bot — Peak/POC/Fib 15m/30m, 7 sources POC, Telegram
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-# Adapter au chemin du dépôt et à l'utilisateur du VPS.
+# ══ ADAPTER CES 3 LIGNES à votre installation ══
+#   WorkingDirectory = chemin du clone (ex: /opt/signal-bot ou /root/signals-bot/signal-bot)
+#   EnvironmentFile  = le .env DANS ce clone
+#   ExecStart        = chemin ABSOLU de npx (commande : which npx)
+# Avec nvm, ajoutez AUSSI une ligne :
+#   Environment=PATH=/root/.nvm/versions/node/v24/bin:/usr/bin:/bin
 WorkingDirectory=/opt/signal-bot
 EnvironmentFile=/opt/signal-bot/.env
 ExecStart=/usr/bin/npx tsx index.ts

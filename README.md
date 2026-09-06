@@ -64,7 +64,14 @@ npm start              # tsx index.ts (lit .env)
 git clone <ce repo> /opt/signal-bot && cd /opt/signal-bot
 npm install && cp .env.example .env && nano .env
 
+# ADAPTER le unit au VPS : chemins + emplacement réel de npx (sinon
+# « Failed to spawn / Failed to load environment files »).
 sudo cp signal-bot.service /etc/systemd/system/
+sudo sed -i "s|ExecStart=/usr/bin/npx|ExecStart=$(which npx)|" /etc/systemd/system/signal-bot.service
+# (clone ailleurs qu'en /opt ? adapter aussi WorkingDirectory/EnvironmentFile,
+#  ou déplacer : sudo mv ~/signals-bot/signal-bot /opt/signal-bot)
+# (node via nvm ? ajouter : Environment=PATH=$(dirname $(which npx)):/usr/bin:/bin)
+
 sudo systemctl daemon-reload
 sudo systemctl enable --now signal-bot
 journalctl -u signal-bot -f        # logs
