@@ -77,7 +77,6 @@ const EVENT_EMOJI: Record<string, string> = {
   ladder_await_downgrade: 'ℹ️',
   reference_peak_moved: '⛓',
   adverse_close: '⚠️',
-  be_deferred: '⏳',
 };
 
 /** Title + explanation per event type (what happens / the action). */
@@ -129,10 +128,6 @@ const EVENT_TEXT: Record<string, { title: string; explain: string }> = {
   adverse_close: {
     title: 'ADVERSE CLOSES',
     explain: 'Consecutive close(s) beyond 2×AOI — forced exit is approaching if the price keeps closing against the trade.',
-  },
-  be_deferred: {
-    title: 'BE DEFERRED',
-    explain: 'Final divergence confirmed in profit but DCAs are still pending: NO break-even yet — limits stay in place waiting for fills, hard stop 2×AOI as backstop.',
   },
 };
 
