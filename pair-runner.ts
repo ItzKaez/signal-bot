@@ -248,9 +248,11 @@ export class PairRunner {
     // sans explication).
     const pos = (snap.positions ?? [])[0] as Record<string, unknown> | undefined;
     let posCtx: string | undefined;
+    let posPlanCreatedAt: number | null = null;
     if (pos) {
       const plan = pos.plan as TradePlan | undefined;
       if (plan) {
+        posPlanCreatedAt = plan.createdAt;
         const fills = typeof pos.fills === 'number' ? pos.fills : 0;
         const avg = typeof pos.averageEntry === 'number' ? pos.averageEntry : null;
         const nextTp = typeof pos.nextTargetPrice === 'number' ? pos.nextTargetPrice : null;
@@ -281,7 +283,13 @@ export class PairRunner {
       if (this.seenPlans.has(key)) continue;
       this.seenPlans.add(key);
       if (p.createdAt >= this.graceT) {
-        outbox.push({ t: p.createdAt, text: setupMessage(this.symbol, p) });
+        // Une position PLUS ANCIENNE est encore vivante à l'instant du
+        // message : ce setup est EN FILE — il activera à sa clôture (le
+        // message d'activation suivra), pas maintenant.
+        const queued = posPlanCreatedAt !== null && posPlanCreatedAt < p.createdAt;
+        const text = setupMessage(this.symbol, p)
+          + (queued ? '\n\n⏳ QUEUED — the current position is still live: this setup activates when it closes.' : '');
+        outbox.push({ t: p.createdAt, text });
       }
     }
 
