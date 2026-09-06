@@ -54,6 +54,7 @@ const DEFAULT_OVERRIDE: Record<string, unknown> = {
   minAoiFloorPct: 0.003,
   minPocConcentration: 0.07,
   pocZoneAgg: 'avg',
+  wickArmStrategy: 'breathe',
   maxLeverage: 10,
 };
 let override = DEFAULT_OVERRIDE;

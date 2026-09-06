@@ -317,6 +317,15 @@ export function buildOptimizedConfig(baseIntervalSeconds: number): StrategyV2Con
   // EN MOYENNE. Alternatives : sum@15% (+1660/+300, plus conservateur) ;
   // sum@10% meilleur en IS (+3303) mais OOS -964\$ (overfit IS).
   pocZoneAgg: 'avg',
+  // Sweep mèche IS+OOS (5 variantes) : 'breathe' = PAS de mèche à la div
+  // confirmée en loss (le trade respire, BE à la première clôture en
+  // profit) ; la mèche ne se pose qu'à la CASSURE réelle de la div, sans
+  // condition de TP. OOS : +1002\$/222t PF 1.11 WR 85% (standard: +25\$,
+  // next_candle: +866\$, sweep: -24\$, breathe_next_candle: +415\$ — le
+  // combo retarde la coupure de cassure et ne cumule pas). IS : +217\$
+  // (standard +2983\$) — l'ancien régime préférait couper vite ; le régime
+  // actuel (2025-26) paie le breathe.
+  wickArmStrategy: 'breathe',
     // Couverture news-candle et filtre EWMA : TESTÉS ET ÉCARTÉS du preset
     // (IS 2023-24 : -2606 → -3045 $, PF 0.56 → 0.48 · OOS 2025-26 :
     // -2668 → -2815 $, PF 0.82 → 0.76 — le gain de drawdown ne compense
