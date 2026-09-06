@@ -309,16 +309,6 @@ export class PairRunner {
       outbox.push({ t: p.createdAt, text: setupMessage(this.symbol, p) });
     }
 
-    // Clôtures (couvre TP / BE / SL mèche / hard stop).
-    for (const t of snap.trades as ClosedTrade[]) {
-      const key = `${t.exitAt}|${t.reason}|${t.pnl.toFixed(2)}`;
-      if (this.seenTrades.has(key)) continue;
-      this.seenTrades.add(key);
-      if (t.exitAt >= this.graceT) {
-        outbox.push({ t: t.exitAt, text: closeMessage(this.symbol, t) });
-      }
-    }
-
     // Journal (fills, BE, SL, ladder, activations, annulations…).
     if (journal.length < this.lastJournalIdx) this.lastJournalIdx = journal.length; // trim
     for (let i = this.lastJournalIdx; i < journal.length; i++) {
@@ -332,6 +322,16 @@ export class PairRunner {
       if (msg) outbox.push({ t: e.t, text: msg });
     }
     this.lastJournalIdx = journal.length;
+
+    // Clôtures (couvre TP / BE / SL mèche / hard stop).
+    for (const t of snap.trades as ClosedTrade[]) {
+      const key = `${t.exitAt}|${t.reason}|${t.pnl.toFixed(2)}`;
+      if (this.seenTrades.has(key)) continue;
+      this.seenTrades.add(key);
+      if (t.exitAt >= this.graceT) {
+        outbox.push({ t: t.exitAt, text: closeMessage(this.symbol, t) });
+      }
+    }
 
     outbox.sort((a, b) => a.t - b.t);
     for (const m of outbox) this.opts.telegram.send(m.text);

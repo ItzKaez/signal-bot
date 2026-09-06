@@ -1117,6 +1117,10 @@ export class AppStrategyEngine {
    *  breathe = pas de mèche ici (BE dès profit, mèche réservée à la
    *  cassure de div) ; next_candle/sweep = différée à la bougie suivante. */
   private requestWickArm(position: Position, plan: TradePlan, side: Side, now: number, average: number, candle: Bar, kind: string, site: 'div' | 'invalidation'): void {
+    // BE déjà armé : aucune mèche — le stop BE est PLUS PROCHE que la
+    // mèche dans le sens de la sortie (BE au-dessus de la moyenne pour un
+    // LONG, mèche en-dessous : le prix touche toujours le BE d'abord).
+    if (position.breakeven) return;
     const strat = this.config.wickArmStrategy;
     const breathing = strat === 'breathe' || strat === 'breathe_next_candle';
     const deferring = strat === 'next_candle' || strat === 'sweep' || (strat === 'breathe_next_candle' && site === 'invalidation');
@@ -1539,7 +1543,7 @@ position.wickStop = position.wickStop === null ? wick : Math.min(position.wickSt
         if (position.lastDivDivergenceAt !== null) {
           position.referencePeakAt = position.lastDivDivergenceAt;
           this.log(now, 'reference_peak_moved', candle.close, undefined,
-            `3 drives · reference peak → ${new Date(position.referencePeakAt * 1000).toLocaleTimeString()} · waiting for its divergence`);
+            `3 drives · reference peak → ${new Date(position.referencePeakAt * 1000).toISOString().slice(11, 16)} UTC · waiting for its divergence`);
         }
         if (inProfit && fullyFilled && !activeWickTouched) {
           position.breakeven = true;

@@ -7,8 +7,13 @@
 import type { JournalEntry, ClosedTrade } from './engine/strategy-v2/engine';
 import type { TradePlan } from './engine/strategy-v2/plans';
 
+// Chiffres significatifs adaptés au prix : BTC/ETH 1-2 décimales, mais
+// XRP/SOL/DOGE en ont besoin de 4-6 (sinon tous les niveaux s'arrondissent
+// à la même valeur affichée et les ordres sont inplaçables).
+const priceDigits = (v: number): number => (v >= 1000 ? 1 : v >= 100 ? 2 : v >= 1 ? 4 : 6);
+
 const f0 = (v: number | undefined | null): string =>
-  v === undefined || v === null || !Number.isFinite(v) ? '—' : v.toLocaleString('en-US', { maximumFractionDigits: 1 });
+  v === undefined || v === null || !Number.isFinite(v) ? '—' : v.toLocaleString('en-US', { maximumFractionDigits: priceDigits(v) });
 
 const f1 = (v: number | undefined | null): string =>
   v === undefined || v === null || !Number.isFinite(v) ? '—' : v.toFixed(1);
