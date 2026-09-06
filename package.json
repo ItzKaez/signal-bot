@@ -1,0 +1,16 @@
+{
+  "name": "signal-bot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Moteur de signaux live 24/7 — stratégie Peak/POC/Fib 15m/30m (setups 15m/30m, 7 sources POC), notifications Telegram",
+  "scripts": {
+    "start": "tsx index.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

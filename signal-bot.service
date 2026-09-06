@@ -1,0 +1,19 @@
+[Unit]
+Description=Trading Helper — Signal Bot (Peak/POC/Fib ladder, Telegram)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Adapter au chemin du dépôt et à l'utilisateur du VPS.
+WorkingDirectory=/opt/signal-bot
+EnvironmentFile=/opt/signal-bot/.env
+ExecStart=/usr/bin/npx tsx index.ts
+Restart=always
+RestartSec=15
+# Le boot (warmup ~90j + replay 3j) peut prendre plusieurs minutes.
+TimeoutStartSec=1800
+MemoryMax=2G
+
+[Install]
+WantedBy=multi-user.target
