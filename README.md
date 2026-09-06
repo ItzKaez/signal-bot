@@ -50,6 +50,21 @@ CATCHUP_DAYS=3
    **votre chat id** → le mettre dans `.env`.
 4. (Groupe ? ajouter le bot au groupe, il répond de même.)
 
+## Tester sans attendre de setups (TEST_DAYS)
+
+Le replay de démarrage peut ÉMETTRE tous les événements des N derniers
+jours — pipeline complet (messages réels, mise en forme, Telegram) sur des
+setups réels — puis le bot s'arrête proprement :
+
+```bash
+TEST_DAYS=14 npm start        # 14 jours rejoués, tous les messages envoyés, exit
+TEST_DAYS=14 DRY_RUN=1 npm start   # idem en console uniquement
+```
+
+Idéal pour valider la mise en forme sur votre téléphone avant de laisser
+tourner le service. Attention : à lancer manuellement, PAS dans le .env du
+service systemd (il s'arrête de lui-même).
+
 ## Lancer
 
 ```bash

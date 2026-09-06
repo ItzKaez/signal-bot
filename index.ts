@@ -29,6 +29,10 @@ const CATCHUP_DAYS = Number(env.CATCHUP_DAYS ?? 3);
 // écriture dans cet ordre) : POC_SOURCES pour restreindre.
 const POC_SOURCES = parsePocSources(env.POC_SOURCES ?? 'BINANCE:USD,BINANCE:USDT.P,BYBIT:USDT.P,OKX:USDT.P,BITFINEX:USD,COINBASE:USD,COINBASE:USDT');
 const BOOT_STAGGER_SEC = Number(env.BOOT_STAGGER_SEC ?? 45);
+/** TEST_DAYS=14 : rejoue les 14 derniers jours et ENVOIE tous les
+ *  événements (setups, fills, BE, SL, clôtures) puis s'arrête — tester
+ *  le pipeline complet sans attendre de vrais setups. */
+const TEST_DAYS = Number(env.TEST_DAYS ?? 0);
 
 // Stratégie : setups 15m/30m UNIQUEMENT (exécution multi-TF sans descente
 // — les frames ne détectent des peaks qu'en 900s/1800s, la cascade vers
@@ -66,8 +70,9 @@ const runners = PAIRS.map((base) => new PairRunner({
   capital: CAPITAL,
   override,
   warmupDays: WARMUP_DAYS,
-  catchupDays: CATCHUP_DAYS,
+  catchupDays: Math.max(CATCHUP_DAYS, TEST_DAYS),
   pollSec: POLL_SEC,
+  testDays: TEST_DAYS,
   pocSources: POC_SOURCES,
   telegram,
 }));
@@ -93,7 +98,12 @@ async function main(): Promise<void> {
 
   // Démarrage séquentiel (pacing Bybit) — les ticks live ne démarrent
   // qu'une fois la paire prête.
-  telegram.send(`🤖 Démarrage du signal bot — ${runners.length} paires : ${runners.map((r) => r.symbol).join(', ')}\nStratégie ladder 15/30m · warmup ${WARMUP_DAYS}j (~${Math.round(runners.length * 2)} min)`);
+  if (TEST_DAYS > 0) {
+    console.log(`MODE TEST : replay des ${TEST_DAYS} derniers jours — tous les événements seront envoyés, puis le bot s'arrêtera.`);
+    telegram.send(`🧪 MODE TEST — replay des ${TEST_DAYS} derniers jours (${runners.map((r) => r.symbol).join(', ')}) : voici TOUS les événements que le bot aurait envoyés. Fin du test juste après.`);
+  } else {
+    telegram.send(`🤖 Démarrage du signal bot — ${runners.length} paires : ${runners.map((r) => r.symbol).join(', ')}\nStratégie ladder 15/30m · warmup ${WARMUP_DAYS}j (~${Math.round(runners.length * 2)} min)`);
+  }
   for (const runner of runners) {
     try {
       await runner.boot();
@@ -103,6 +113,15 @@ async function main(): Promise<void> {
       telegram.send(`🛑 ${runner.symbol} : échec de démarrage — ${msg}`);
     }
     await new Promise((r) => setTimeout(r, 3000));
+  }
+
+  // Mode test : le replay a tout émis — résumé puis arrêt propre.
+  if (TEST_DAYS > 0) {
+    const n = telegram.sentLog.length;
+    telegram.send(`🧪 Fin du test — ${n} message(s) émis au total sur ${TEST_DAYS} jours de replay.`);
+    console.log(`Test terminé : ${n} message(s). Arrêt.`);
+    setTimeout(() => process.exit(0), 5000);
+    return;
   }
 
   // Boucle live : une tick par POLL_SEC par paire, décalées entre elles.

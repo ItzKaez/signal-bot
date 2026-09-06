@@ -30,6 +30,10 @@ export interface PairRunnerOptions {
   warmupDays: number;
   catchupDays: number;
   pollSec: number;
+  /** TEST_DAYS > 0 : mode TEST — le replay du catchup ÉMET tous les
+   *  événements (setups, fills, BE, SL, clôtures) comme s'ils étaient
+   *  live, puis le process se termine. Pour tester sans attendre. */
+  testDays: number;
   /** Sources POC (ex. les 7 des backtests) — union des niveaux. */
   pocSources: PocSourceDef[];
   telegram: Telegram;
@@ -56,7 +60,9 @@ export class PairRunner {
   lastError: string | null = null;
 
   constructor(private readonly opts: PairRunnerOptions) {
-    this.graceT = Math.floor(Date.now() / 1000) - 120;
+    // Mode test : la grâce couvre tout sauf les TEST_DAYS derniers jours —
+    // le replay émet donc les événements du passé récent.
+    this.graceT = Math.floor(Date.now() / 1000) - (opts.testDays > 0 ? opts.testDays * 86400 : 120);
   }
 
   get symbol(): string { return this.opts.symbol; }
@@ -104,10 +110,14 @@ export class PairRunner {
       const poc = computePocUnion(this.srcDailies, this.intraday, b);
       this.engine.setPocLevels(poc.levels, poc.meta);
       this.engine.update(this.base1m, this.dailies, this.intraday, true, b - 1);
+      // Mode test : chaque jour rejoué émet ses événements — pipeline
+      // complet (messages, diffs plans/trades) sur des setups RÉELS.
+      if (this.opts.testDays > 0) this.emitNew();
     }
     // POCs du jour courant + consommation jusqu'à la dernière clôturée.
     this.injectTodayPocs(nowSec);
     this.engine.update(this.base1m, this.dailies, this.intraday, false);
+    if (this.opts.testDays > 0) this.emitNew();
 
     // Marquer comme vus les états reconstruits (pas de spam au démarrage).
     this.syncSeenState();
