@@ -40,10 +40,14 @@ const TEST_DAYS = Number(env.TEST_DAYS ?? 0);
 // 15m→30m restent actives) + preset « POCs Reversal Optimisé ». Surcharge
 // possible via SIGNAL_OVERRIDE='{"executionSeconds":[60,300,900,1800],…}'.
 const DEFAULT_OVERRIDE: Record<string, unknown> = {
-  mtfLadderEnabled: true,
-  ladderEntryTfCount: 2,
-  ladderDowngradeEnabled: false,
-  executionSeconds: [900, 1800],
+  // Ladder OFF : mono-15m strict — EXACTEMENT la config validée IS +217$ /
+  // OOS +1002$ (déferral 3-drives actif, comme le run de référence).
+  mtfLadderEnabled: false,
+  // 15m SEUL : l'analyse par classe de trades (IS+OOS) a montré que les
+  // entrées 30m perdent (-2081$/-1016$) et bloquent le slot mono avec des
+  // trades lents — le combiné [900,1800] est la pire des 3 configs testées.
+  // Mono-15m : IS +217$ / OOS +1002$ (meilleure config mesurée).
+  executionSeconds: [900],
   limitExpiryBars: 375, // 6,25 h en bougies 1m (parité avec la validation)
   breakevenCoverFees: true,
   breakevenMode: 'profit_close',
