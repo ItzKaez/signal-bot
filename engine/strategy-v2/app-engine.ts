@@ -879,14 +879,13 @@ export class AppStrategyEngine {
         return;
       }
     }
-    // Dernier peak prioritaire : un nouveau plan du même côté (né du
-    // ré-armement post-divergence — l'ancien peak a déjà divergé, schéma
-    // 3 drives) REMPLACE les limites du plan plus ancien. On ne garde jamais
-    // deux jeux de limites du même côté : seul le dernier peak doit être
-    // joué. Ça vaut aussi pour la position ACTIVE sans aucun fill (limites
-    // posées au marché mais jamais touchées) — aucune exposition, on peut
-    // l'annuler proprement.
-    const staleSidePlans = this.pending.filter((other) => other.side === plan.side);
+    // Dernier peak prioritaire : le setup le plus RÉCENT gagne, CHANGEMENT
+    // DE CÔTÉ INCLUS. Un nouveau plan remplace TOUT plan non rempli (en
+    // file comme actif sans aucun fill — limites posées mais jamais
+    // touchées : zéro exposition, on peut annuler proprement). Même côté :
+    // l'ancien peak a divergé (schéma 3 drives) ; côté opposé : le nouvel
+    // extrême contredit la thèse de l'ancien setup.
+    const staleSidePlans = [...this.pending];
     for (const old of staleSidePlans) {
       this.pending = this.pending.filter((other) => other !== old);
       // Le plan remplacé quitte AUSSI le pool ladder — sinon le candidat
@@ -896,17 +895,17 @@ export class AppStrategyEngine {
       }
       this.updateSignal(old, 'CANCELLED', 0, 'replaced by the latest peak (the former diverged)');
       this.log(plan.createdAt, 'plan_replaced', old.entryPoc, undefined,
-        `setup ${old.side} RSI ${old.peakRsi.toFixed(1)} cancelled (queue) · replaced by peak RSI ${plan.peakRsi.toFixed(1)} (divergence on the former)`);
+        `setup ${old.side} RSI ${old.peakRsi.toFixed(1)} cancelled (queue) · replaced by ${plan.side === old.side ? 'peak' : 'OPPOSITE peak'} RSI ${plan.peakRsi.toFixed(1)}${plan.side === old.side ? ' (divergence on the former)' : ''}`);
     }
     for (const active of [...this.positions]) {
-      if (active.plan.side !== plan.side || active.fills.length > 0) continue;
+      if (active.fills.length > 0) continue;
       // LADDER règle 1 : le TF le plus ÉLEVÉ gagne — un setup d'un TF
       // INFÉRIEUR ne remplace JAMAIS une position non remplie d'un TF
       // supérieur (elle garde ses limites, il attend en file).
       if (this.config.mtfLadderEnabled && plan.executionSeconds < active.plan.executionSeconds) continue;
       this.updateSignal(active.plan, 'CANCELLED', 0, 'replaced by the latest peak (the former diverged)');
       this.log(plan.createdAt, 'plan_replaced', active.plan.entryPoc, undefined,
-        `setup ${active.plan.side} RSI ${active.plan.peakRsi.toFixed(1)} cancelled (active limits, no fill) · replaced by peak RSI ${plan.peakRsi.toFixed(1)}`);
+        `setup ${active.plan.side} RSI ${active.plan.peakRsi.toFixed(1)} cancelled (active limits, no fill) · replaced by ${plan.side === active.plan.side ? 'peak' : 'OPPOSITE peak'} RSI ${plan.peakRsi.toFixed(1)}`);
       this.positions = this.positions.filter((p) => p !== active);
     }
     this.pending.push(plan);
