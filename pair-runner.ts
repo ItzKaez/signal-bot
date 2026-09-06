@@ -50,6 +50,9 @@ export class PairRunner {
   private readonly seenPlans = new Set<string>();
   private readonly seenTrades = new Set<string>();
   private readonly openNoticeSent = new Set<string>();
+  /** Messages (setup à l'activation, etc.) poussés pendant la construction
+   *  du contexte, vidés puis triés à chaque emitNew. */
+  private readonly outboxCache: Array<{ t: number; text: string }> = [];
   private currentPocDay = -1;
   private pocCount = 0;
   private lastRefsAt = 0;
@@ -240,6 +243,10 @@ export class PairRunner {
     const last = this.base1m[this.base1m.length - 1]?.close ?? null;
     const snap = this.engine.getSnapshot(last);
     const journal = snap.journal as JournalEntry[];
+    // File de messages de cet appel (vidée) — le bloc position courante
+    // y pousse AVANT les diffs ; tout est trié par timestamp à la fin.
+    const outbox = this.outboxCache;
+    outbox.length = 0;
 
     // Contexte de la POSITION COURANTE (mono-position) : chaque événement
     // de gestion dit de quel trade il parle — côté, TF, moyenne, fills,
@@ -253,6 +260,20 @@ export class PairRunner {
       const plan = pos.plan as TradePlan | undefined;
       if (plan) {
         posPlanCreatedAt = plan.createdAt;
+        // Setup qui ATTENDAIT en file (trouvé pendant une position vivante) :
+        // annoncé seulement MAINTENANT qu'il active (règle : aucun message
+        // de setup tant qu'il n'est pas actionnable).
+        const posKey = `${plan.createdAt}|${plan.executionSeconds}`;
+        if (!this.seenPlans.has(posKey) && plan.createdAt >= this.graceT) {
+          this.seenPlans.add(posKey);
+          // Horodatage = le moment de l'ACTIVATION : le snapshot n'expose
+          // pas activatedAt — le dernier événement du lot est l'activation
+          // (ou son immédiat voisin), jamais l'heure de création du peak.
+          const activatedAt = typeof pos.activatedAt === 'number'
+            ? pos.activatedAt
+            : (journal.length > 0 ? journal[journal.length - 1].t : plan.createdAt);
+          outbox.push({ t: activatedAt, text: setupMessage(this.symbol, plan, activatedAt) });
+        }
         const fills = typeof pos.fills === 'number' ? pos.fills : 0;
         const avg = typeof pos.averageEntry === 'number' ? pos.averageEntry : null;
         const nextTp = typeof pos.nextTargetPrice === 'number' ? pos.nextTargetPrice : null;
@@ -275,22 +296,17 @@ export class PairRunner {
     // Collecte puis ENVOI EN ORDRE CHRONOLOGIQUE : setups, clôtures et
     // événements de journal étaient envoyés par catégorie (le setup 16:45
     // s'affichait avant les fills 16:22) — on trie tout par timestamp.
-    const outbox: Array<{ t: number; text: string }> = [];
-
-    // Nouveaux SETUPS (message riche : entrées, AOI, TPs).
+    // Nouveaux SETUPS — annoncés SEULEMENT s'ils sont actionnables tout de
+    // suite (aucune position plus ancienne vivante). Un setup trouvé pendant
+    // un trade vivant reste SILENCIEUX en file : il sera annoncé au moment
+    // de son activation (bloc « position courante » ci-dessus).
     for (const p of snap.pendingPlans) {
       const key = `${p.createdAt}|${p.executionSeconds}`;
       if (this.seenPlans.has(key)) continue;
+      if (p.createdAt < this.graceT) { this.seenPlans.add(key); continue; }
+      if (posPlanCreatedAt !== null && posPlanCreatedAt < p.createdAt) continue; // en file : silence
       this.seenPlans.add(key);
-      if (p.createdAt >= this.graceT) {
-        // Une position PLUS ANCIENNE est encore vivante à l'instant du
-        // message : ce setup est EN FILE — il activera à sa clôture (le
-        // message d'activation suivra), pas maintenant.
-        const queued = posPlanCreatedAt !== null && posPlanCreatedAt < p.createdAt;
-        const text = setupMessage(this.symbol, p)
-          + (queued ? '\n\n⏳ QUEUED — the current position is still live: this setup activates when it closes.' : '');
-        outbox.push({ t: p.createdAt, text });
-      }
+      outbox.push({ t: p.createdAt, text: setupMessage(this.symbol, p) });
     }
 
     // Clôtures (couvre TP / BE / SL mèche / hard stop).

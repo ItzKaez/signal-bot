@@ -23,11 +23,24 @@ const dt = (t: number): string => new Date(t * 1000).toISOString().slice(5, 16).
 /** Timestamp of the event (UTC) — always shown. */
 const when = (t: number): string => `🗓 ${dt(t)} UTC`;
 
-/** Full message for a NEW SETUP: levels, AOI, TPs, RR + action. */
-export function setupMessage(symbol: string, plan: TradePlan): string {
+/** Full message for a NEW SETUP: levels, AOI, TPs, RR + action.
+ *  announceAt : quand le message est émis à l'ACTIVATION (setup qui a
+ *  attendu en file) — l'heure affichée est l'activation, la découverte
+ *  du peak est mentionnée dans le corps. */
+export function setupMessage(symbol: string, plan: TradePlan, announceAt?: number): string {
+  const header = announceAt !== undefined && announceAt > plan.createdAt
+    ? [
+      `🎯 NEW SETUP · ${symbol} · ${plan.side} ${tf(plan.executionSeconds)}`,
+      when(announceAt),
+      '',
+      `Setup detected ${dt(plan.createdAt)} UTC — it waited in queue while the previous position was live; it activates NOW.`,
+    ]
+    : [
+      `🎯 NEW SETUP · ${symbol} · ${plan.side} ${tf(plan.executionSeconds)}`,
+      when(plan.createdAt),
+    ];
   return [
-    `🎯 NEW SETUP · ${symbol} · ${plan.side} ${tf(plan.executionSeconds)}`,
-    when(plan.createdAt),
+    ...header,
     '',
     `The ${tf(plan.executionSeconds)} RSI printed a peak at ${f1(plan.peakRsi)} (price ${f0(plan.peakPrice)}) — expecting a pullback into liquidity.`,
     `Entry POC: ${f0(plan.entryPoc)} · AOI ${(plan.aoiPct * 100).toFixed(2)}% · SL bound: ${f0(plan.aoiBoundary)}`,
