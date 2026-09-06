@@ -1495,6 +1495,19 @@ position.wickStop = position.wickStop === null ? wick : (side === 'LONG' ? Math.
     // Invalidation lue sur le setup SURVEILLÉ (ladderRef en mode ladder).
     const invalidationEvents = this.invalidationByTime(now, watchSec);
     const invalidation = invalidationEvents.find((event) => event.side === side);
+    if (invalidation && !position.breakeven) {
+      // Invalidation EN PROFIT (règle utilisateur : div cassée/peak broken +
+      // profit → BE immédiat, sans attendre TP1) : le setup est mort, on
+      // verrouille — BE frais-couverts + annulation des limites restantes.
+      const inProfitNow = side === 'LONG' ? candle.close > average : candle.close < average;
+      if (inProfitNow && !activeWickTouched) {
+        position.breakeven = true;
+        position.breakevenLevel = this.beArmLevel(side, average, candle.close);
+        position.protectiveStopFrom = now;
+        this.cancelRemainingLimitsAtBe(now, plan, position);
+        this.log(now, 'breakeven_enabled', position.breakevenLevel, undefined, `invalidation (${invalidation.reason}) in profit · stop at ${position.breakevenLevel.toFixed(1)}${position.breakevenLevel !== average ? ' (frais couverts)' : ' (moyenne)'} (active next candle)`);
+      }
+    }
     if (invalidation && (this.config.mtfLadderEnabled || this.canArmWickStop(position))) {
       // Peak de RÉFÉRENCE cassé (breakout/midline/âge) : même règle que la
       // div confirmée en loss — SL sur la mèche adverse depuis le peak de
@@ -1516,7 +1529,11 @@ position.wickStop = position.wickStop === null ? wick : (side === 'LONG' ? Math.
     }
     if (invalidation && this.config.cancelLimitsOnPartialInvalidation && !position.limitsCancelled) {
       position.limitsCancelled = true;
-      this.log(now, 'limits_cancelled', undefined, undefined, 'invalidation: remaining DCA limits removed');
+      // Message seulement s'il RESTE des limites à annuler — une position
+      // fully filled n'a rien en attente (sinon message trompeur).
+      if (position.filledLevels.size < plan.entryLevels.length) {
+        this.log(now, 'limits_cancelled', undefined, undefined, 'invalidation: remaining DCA limits removed');
+      }
     }
 
     const forcedLevel = side === 'LONG'

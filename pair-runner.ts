@@ -270,13 +270,18 @@ export class PairRunner {
       }
     }
 
+    // Collecte puis ENVOI EN ORDRE CHRONOLOGIQUE : setups, clôtures et
+    // événements de journal étaient envoyés par catégorie (le setup 16:45
+    // s'affichait avant les fills 16:22) — on trie tout par timestamp.
+    const outbox: Array<{ t: number; text: string }> = [];
+
     // Nouveaux SETUPS (message riche : entrées, AOI, TPs).
     for (const p of snap.pendingPlans) {
       const key = `${p.createdAt}|${p.executionSeconds}`;
       if (this.seenPlans.has(key)) continue;
       this.seenPlans.add(key);
       if (p.createdAt >= this.graceT) {
-        this.opts.telegram.send(setupMessage(this.symbol, p));
+        outbox.push({ t: p.createdAt, text: setupMessage(this.symbol, p) });
       }
     }
 
@@ -286,7 +291,7 @@ export class PairRunner {
       if (this.seenTrades.has(key)) continue;
       this.seenTrades.add(key);
       if (t.exitAt >= this.graceT) {
-        this.opts.telegram.send(closeMessage(this.symbol, t));
+        outbox.push({ t: t.exitAt, text: closeMessage(this.symbol, t) });
       }
     }
 
@@ -300,9 +305,12 @@ export class PairRunner {
       this.lastSentT = e.t;
       this.lastEventAt = e.t;
       const msg = eventMessage(this.symbol, e, POSITION_EVENTS.has(e.type) ? posCtx : undefined);
-      if (msg) this.opts.telegram.send(msg);
+      if (msg) outbox.push({ t: e.t, text: msg });
     }
     this.lastJournalIdx = journal.length;
+
+    outbox.sort((a, b) => a.t - b.t);
+    for (const m of outbox) this.opts.telegram.send(m.text);
   }
 }
 
