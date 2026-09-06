@@ -340,7 +340,7 @@ export class PairRunner {
 
 /** Événements qui parlent de la position OUVERTE (reçoivent le contexte). */
 const POSITION_EVENTS = new Set([
-  'plan_activated', 'dca_fill', 'breakeven_enabled', 'sl_wick', 'limits_cancelled',
+  'plan_activated', 'dca_fill', 'breakeven_enabled', 'sl_wick', 'limits_cancelled', 'wick_breathe',
   'ladder_upgrade', 'ladder_downgrade', 'ladder_downgrade_late',
   'ladder_await_downgrade', 'reference_peak_moved', 'adverse_close',
 ]);
