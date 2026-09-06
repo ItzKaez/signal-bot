@@ -634,7 +634,7 @@ export class AppStrategyEngine {
     // encore les remplir et améliorer la moyenne. Le peak est DIFFÉRÉ : si
     // la position se ferme (p.ex. la bougie qui le confirme nous stoppe),
     // il redevient éligible pour un vrai nouveau setup.
-    if (!this.config.mtfLadderEnabled && this.positions.some((p) => p.plan.side === peak.side && p.fills.length > 0)) {
+    if (!this.config.mtfLadderEnabled && this.positions.some((p) => p.plan.side === peak.side && p.fills.length > 0 && !p.breakeven)) {
       this.deferredPeaks.push(peak);
       this.log(peak.confirmedAt, 'peak_3drive_ignored', peak.peakPrice, undefined,
         `${peak.side} RSI ${peak.peakRsi.toFixed(1)} · 3 drives of the current setup · same setup, no new limits (deferred while the position lives)`);
@@ -875,6 +875,10 @@ export class AppStrategyEngine {
     }
     for (const active of [...this.positions]) {
       if (active.plan.side !== plan.side || active.fills.length > 0) continue;
+      // LADDER règle 1 : le TF le plus ÉLEVÉ gagne — un setup d'un TF
+      // INFÉRIEUR ne remplace JAMAIS une position non remplie d'un TF
+      // supérieur (elle garde ses limites, il attend en file).
+      if (this.config.mtfLadderEnabled && plan.executionSeconds < active.plan.executionSeconds) continue;
       this.updateSignal(active.plan, 'CANCELLED', 0, 'replaced by the latest peak (the former diverged)');
       this.log(plan.createdAt, 'plan_replaced', active.plan.entryPoc, undefined,
         `setup ${active.plan.side} RSI ${active.plan.peakRsi.toFixed(1)} cancelled (active limits, no fill) · replaced by peak RSI ${plan.peakRsi.toFixed(1)}`);
@@ -997,7 +1001,9 @@ export class AppStrategyEngine {
     if (this.deferredPeaks.length === 0) return;
     const stillDeferred: AppPeak[] = [];
     for (const peak of this.deferredPeaks) {
-      if (this.positions.some((p) => p.plan.side === peak.side && p.fills.length > 0)) {
+      // Même condition que le deferral : une position BE-armée (fin de
+      // partie) ne retient plus les peaks — ils redeviennent des setups.
+      if (this.positions.some((p) => p.plan.side === peak.side && p.fills.length > 0 && !p.breakeven)) {
         stillDeferred.push(peak);
         continue;
       }
@@ -1170,8 +1176,13 @@ export class AppStrategyEngine {
     // le permettent (chacun devient une position indépendante) ; en mode
     // mono, une seule position à la fois — les suivantes attendent en file.
     while (this.pending.length > 0 && this.pending[0].createdAt <= now) {
-      if (!this.config.hedgingEnabled && this.positions.length > 0) break;
-      if (this.positions.length >= this.config.maxConcurrentPositions) break;
+      // Une position BE-armée est en fin de partie : stop verrouillé frais-
+      // couverts, limites annulées — elle ne peut plus PERDRE et ne doit plus
+      // occuper le slot : les nouveaux setups démarrent pendant qu'elle
+      // attend son stop/TPs (seules les positions NON protégées bloquent).
+      const blocking = this.positions.filter((p) => !p.breakeven).length;
+      if (!this.config.hedgingEnabled && blocking > 0) break;
+      if (blocking >= this.config.maxConcurrentPositions) break;
       // LADDER règle 1 : activer le setup du TF le PLUS ÉLEVÉ disponible
       // (pas FIFO) — un peak 15m avec un setup 30m jouable joue le 30m.
       // Règle 6 : les DÉBUTS de setup sont limités aux N TF les plus hauts

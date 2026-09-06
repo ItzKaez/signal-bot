@@ -89,6 +89,8 @@ const EVENT_EMOJI: Record<string, string> = {
   ladder_await_downgrade: 'ℹ️',
   reference_peak_moved: '⛓',
   adverse_close: '⚠️',
+  plan_replaced: '♻️',
+  twin_replaced: '♻️',
 };
 
 /** Title + explanation per event type (what happens / the action). */
@@ -116,6 +118,14 @@ const EVENT_TEXT: Record<string, { title: string; explain: string }> = {
   limits_cancelled: {
     title: 'DCAS CANCELLED',
     explain: 'Partial invalidation: remaining limits are pulled, the filled part keeps being managed.',
+  },
+  plan_replaced: {
+    title: 'SETUP REPLACED',
+    explain: 'The previous unfilled setup was cancelled — the latest peak takes its place (the former diverged).',
+  },
+  twin_replaced: {
+    title: 'TWIN REPLACED',
+    explain: 'This peak is a twin of a higher-priority timeframe setup: the higher TF takes the slot.',
   },
   ladder_upgrade: {
     title: 'WATCH UPGRADE',
@@ -152,10 +162,14 @@ export function eventMessage(symbol: string, e: JournalEntry, posContext?: strin
   // Variante : une RELÈVE de BE (profit_close) n'annule pas de DCA — c'est
   // un resserrement du stop, pas un premier armement.
   const isBeUpgrade = e.type === 'breakeven_enabled' && !!e.note?.includes('BE upgrade');
-  const title = isBeUpgrade ? 'BE RAISED' : text.title;
+  // Variante : annulation des DCA par l'armement du BE (pas une invalidation).
+  const isBeCancel = e.type === 'limits_cancelled' && !!e.note?.includes('BE armed');
+  const title = isBeUpgrade ? 'BE RAISED' : isBeCancel ? 'DCAS CANCELLED (BE)' : text.title;
   const explain = isBeUpgrade
     ? 'Fee-covering stop RAISED higher (never loosened) — the trade locks in more as price closes better.'
-    : text.explain;
+    : isBeCancel
+      ? 'Break-even armed: the remaining DCA limits are removed — setup complete, the stop is locked.'
+      : text.explain;
   const price = e.price !== undefined && e.price !== null ? ` @ ${f0(e.price)}` : '';
   const lines = [
     `${emoji} ${title} · ${symbol}${price}`,
