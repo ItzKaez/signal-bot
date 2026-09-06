@@ -21,6 +21,7 @@ import { fetchKlines, fetchRange, closedOnly } from './bybit';
 import { computePocUnion } from './poc';
 import { fetchSourceDaily, type PocSourceDef } from './sources';
 import { setupMessage, closeMessage, eventMessage } from './format';
+import type { TradePlan } from './engine/strategy-v2/plans';
 import type { Telegram } from './telegram';
 
 export interface PairRunnerOptions {
@@ -48,6 +49,7 @@ export class PairRunner {
   private lastSentT = 0;
   private readonly seenPlans = new Set<string>();
   private readonly seenTrades = new Set<string>();
+  private readonly openNoticeSent = new Set<string>();
   private currentPocDay = -1;
   private pocCount = 0;
   private lastRefsAt = 0;
@@ -104,14 +106,20 @@ export class PairRunner {
 
     // Catchup : POCs par frontière de jour UTC (causal : données < frontière),
     // exactement la sémantique du cache pocs-day du backtest.
-    const boundaries: number[] = [];
-    for (let d = Math.floor(catchupStart / 86400) * 86400 + 86400; d <= nowSec; d += 86400) boundaries.push(d);
-    for (const b of boundaries) {
-      const poc = computePocUnion(this.srcDailies, this.intraday, b);
-      this.engine.setPocLevels(poc.levels, poc.meta);
-      this.engine.update(this.base1m, this.dailies, this.intraday, true, b - 1);
-      // Mode test : chaque jour rejoué émet ses événements — pipeline
-      // complet (messages, diffs plans/trades) sur des setups RÉELS.
+    // Mode TEST : on avance par HEURE (au lieu du jour) pour émettre les
+    // événements avec un contexte position à jour — POCs toujours injectés
+    // à chaque frontière de jour UTC uniquement.
+    const stepSec = this.opts.testDays > 0 ? 3600 : 86400;
+    const firstBoundary = Math.floor(catchupStart / 86400) * 86400 + 86400;
+    let injectedDay = -1;
+    for (let t = firstBoundary; t <= nowSec + stepSec; t += stepSec) {
+      const day = Math.floor(t / 86400) * 86400;
+      if (day !== injectedDay) {
+        const poc = computePocUnion(this.srcDailies, this.intraday, day);
+        this.engine.setPocLevels(poc.levels, poc.meta);
+        injectedDay = day;
+      }
+      this.engine.update(this.base1m, this.dailies, this.intraday, true, Math.min(t, nowSec) - 1);
       if (this.opts.testDays > 0) this.emitNew();
     }
     // POCs du jour courant + consommation jusqu'à la dernière clôturée.
@@ -233,6 +241,35 @@ export class PairRunner {
     const snap = this.engine.getSnapshot(last);
     const journal = snap.journal as JournalEntry[];
 
+    // Contexte de la POSITION COURANTE (mono-position) : chaque événement
+    // de gestion dit de quel trade il parle — côté, TF, moyenne, fills,
+    // prochain TP. En test, une position ouverte AVANT la fenêtre du replay
+    // reçoit une notice unique (sinon le replay commence au milieu du trade
+    // sans explication).
+    const pos = (snap.positions ?? [])[0] as Record<string, unknown> | undefined;
+    let posCtx: string | undefined;
+    if (pos) {
+      const plan = pos.plan as TradePlan | undefined;
+      if (plan) {
+        const fills = typeof pos.fills === 'number' ? pos.fills : 0;
+        const avg = typeof pos.averageEntry === 'number' ? pos.averageEntry : null;
+        const nextTp = typeof pos.nextTargetPrice === 'number' ? pos.nextTargetPrice : null;
+        posCtx = `Position: ${plan.side} ${Math.round(plan.executionSeconds / 60)}m · setup ${new Date(plan.createdAt * 1000).toISOString().slice(5, 16).replace('T', ' ')} UTC · avg ${avg !== null ? avg.toFixed(1) : '—'} · fills ${fills}/${plan.entryLevels.length}${nextTp !== null ? ` · next TP ${nextTp.toFixed(1)}` : ''}`;
+        if (plan.createdAt < this.graceT) {
+          const key = `${plan.createdAt}|${plan.executionSeconds}`;
+          if (!this.openNoticeSent.has(key)) {
+            this.openNoticeSent.add(key);
+            this.opts.telegram.send([
+              `📌 ${this.symbol} · POSITION ALREADY OPEN when the replay window starts`,
+              posCtx,
+              '',
+              '→ Management events below start mid-trade — the setup message predates the window.',
+            ].join('\n'));
+          }
+        }
+      }
+    }
+
     // Nouveaux SETUPS (message riche : entrées, AOI, TPs).
     for (const p of snap.pendingPlans) {
       const key = `${p.createdAt}|${p.executionSeconds}`;
@@ -253,16 +290,23 @@ export class PairRunner {
       }
     }
 
-    // Journal (fills, BE, SL, ladder, activations…).
+    // Journal (fills, BE, SL, ladder, activations, annulations…).
     if (journal.length < this.lastJournalIdx) this.lastJournalIdx = journal.length; // trim
     for (let i = this.lastJournalIdx; i < journal.length; i++) {
       const e = journal[i];
       if (e.t < this.graceT || e.t <= this.lastSentT) continue;
       this.lastSentT = e.t;
       this.lastEventAt = e.t;
-      const msg = eventMessage(this.symbol, e, this.opts.testDays > 0);
+      const msg = eventMessage(this.symbol, e, POSITION_EVENTS.has(e.type) ? posCtx : undefined);
       if (msg) this.opts.telegram.send(msg);
     }
     this.lastJournalIdx = journal.length;
   }
 }
+
+/** Événements qui parlent de la position OUVERTE (reçoivent le contexte). */
+const POSITION_EVENTS = new Set([
+  'dca_fill', 'breakeven_enabled', 'sl_wick', 'limits_cancelled',
+  'ladder_upgrade', 'ladder_downgrade', 'ladder_downgrade_late',
+  'ladder_await_downgrade', 'reference_peak_moved', 'adverse_close',
+]);

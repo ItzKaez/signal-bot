@@ -121,16 +121,11 @@ const EVENT_TEXT: Record<string, { title: string; explain: string }> = {
   },
 };
 
-// DIAGNOSTIC events (queue purges, waits): useful live (rare), but in a
-// TEST-mode burst they are what spams and triggers 429s — muted when quiet.
-const QUIET_SKIP = new Set(['cancelled_unfilled', 'ladder_await_downgrade', 'waiting_margin']);
-
-/** Journal event → message (null = do not send).
- *  quiet (TEST mode): without diagnostic events. */
-export function eventMessage(symbol: string, e: JournalEntry, quiet = false): string | null {
+/** Journal event → message (null = do not send). posContext: line
+ *  identifying the CURRENT position the event belongs to (mono-position). */
+export function eventMessage(symbol: string, e: JournalEntry, posContext?: string): string | null {
   const emoji = EVENT_EMOJI[e.type];
   if (!emoji) return null;
-  if (quiet && QUIET_SKIP.has(e.type)) return null;
   const text = EVENT_TEXT[e.type];
   const price = e.price !== undefined && e.price !== null ? ` @ ${f0(e.price)}` : '';
   const lines = [
@@ -138,6 +133,7 @@ export function eventMessage(symbol: string, e: JournalEntry, quiet = false): st
     when(e.t),
   ];
   if (e.note) lines.push('', e.note);
+  if (posContext) lines.push(posContext);
   lines.push('', `→ ${text.explain}`);
   return lines.join('\n');
 }
