@@ -20,7 +20,7 @@ import type { Candle } from './engine/types';
 import { fetchKlines, fetchRange, closedOnly } from './bybit';
 import { computePocUnion } from './poc';
 import { fetchSourceDaily, type PocSourceDef } from './sources';
-import { setupMessage, closeMessage, eventMessage } from './format';
+import { setupMessage, closeMessage, eventMessage, priceDigits } from './format';
 import type { TradePlan } from './engine/strategy-v2/plans';
 import type { Telegram } from './telegram';
 
@@ -277,7 +277,7 @@ export class PairRunner {
         const fills = typeof pos.fills === 'number' ? pos.fills : 0;
         const avg = typeof pos.averageEntry === 'number' ? pos.averageEntry : null;
         const nextTp = typeof pos.nextTargetPrice === 'number' ? pos.nextTargetPrice : null;
-        posCtx = `Position: ${plan.side} ${Math.round(plan.executionSeconds / 60)}m · setup ${new Date(plan.createdAt * 1000).toISOString().slice(5, 16).replace('T', ' ')} UTC · avg ${avg !== null ? avg.toFixed(1) : '—'} · fills ${fills}/${plan.entryLevels.length}${nextTp !== null ? ` · next TP ${nextTp.toFixed(1)}` : ''}`;
+        posCtx = `Position: ${plan.side} ${Math.round(plan.executionSeconds / 60)}m · setup ${new Date(plan.createdAt * 1000).toISOString().slice(5, 16).replace('T', ' ')} UTC · avg ${avg !== null ? avg.toFixed(priceDigits(avg)) : '—'} · fills ${fills}/${plan.entryLevels.length}${nextTp !== null ? ` · next TP ${nextTp.toFixed(priceDigits(nextTp))}` : ''}`;
         if (plan.createdAt < this.graceT) {
           const key = `${plan.createdAt}|${plan.executionSeconds}`;
           if (!this.openNoticeSent.has(key)) {

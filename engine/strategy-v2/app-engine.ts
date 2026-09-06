@@ -1396,7 +1396,7 @@ position.wickStop = position.wickStop === null ? wick : (side === 'LONG' ? Math.
         position.fills.push({ price, size: fillSize, time: now });
         position.remainingSize += fillSize;
         position.filledLevels.add(rounded);
-        this.log(now, 'dca_fill', price, fillSize, `DCA${order + 1} limit @ ${level.toFixed(1)}`);
+        this.log(now, 'dca_fill', price, fillSize, `DCA${order + 1} limit @ ${level >= 100 ? level.toFixed(1) : level.toFixed(4)}`);
         // Mettre à jour le signal avec le statut fill et le prix de fill.
         this.updateSignal(plan, 'OPEN', undefined, `Fill @ ${price.toFixed(1)} (${order + 1}/${plan.entryLevels.length})`);
       }
