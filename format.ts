@@ -43,21 +43,33 @@ export function setupMessage(symbol: string, plan: TradePlan): string {
 /** Explanation of a close reason. */
 function closeExplain(reason: string): string {
   if (reason.startsWith('tp')) return 'Target hit — partial or full profit taken.';
-  if (reason.includes('break_even')) return 'Break-even exit — the fee-covering stop was touched.';
+  if (reason.includes('break_even')) return 'BE STOP TOUCHED — exited at the fee-covering level: no loss on the trade.';
   if (reason.includes('hard_stop')) return 'Hard stop 2×AOI hit — full-loss exit.';
-  if (reason.includes('wick')) return 'Adverse wick stop touched.';
+  if (reason.includes('wick')) return 'WICK SL touched — exited on the adverse-wick stop placed after the divergence.';
+  if (reason.includes('forced')) return 'Forced exit — consecutive closes beyond 2×AOI.';
+  if (reason.includes('divergence_invalidated')) return 'Protective stop hit after divergence invalidation.';
   return 'Position closed.';
 }
 
-/** Trade close message (covers TPs, BE, wick SL, hard stop). */
+/** Clear label per close reason (what exactly was hit). */
+function closeLabel(reason: string): string {
+  if (reason.startsWith('tp')) return `TP${reason.slice(2)} HIT`;
+  if (reason.includes('break_even')) return 'BE STOP HIT';
+  if (reason.includes('hard_stop')) return 'HARD STOP HIT';
+  if (reason.includes('wick')) return 'WICK SL HIT';
+  if (reason.includes('forced')) return 'FORCED EXIT';
+  return 'CLOSED';
+}
+
+/** Trade close message (covers TPs, BE, wick SL, hard stop, forced exit). */
 export function closeMessage(symbol: string, t: ClosedTrade): string {
   const pnl = t.pnl >= 0 ? `+${t.pnl.toFixed(2)}$` : `${t.pnl.toFixed(2)}$`;
   const hours = ((t.exitAt - t.entryAt) / 3600).toFixed(1);
   return [
-    `${t.pnl >= 0 ? '✅' : '🔻'} CLOSED · ${symbol} · ${t.side} (${t.reason})`,
+    `${t.pnl >= 0 ? '✅' : '🔻'} ${closeLabel(t.reason)} · ${symbol} · ${t.side}`,
     when(t.exitAt),
     '',
-    `Entry ${f0(t.averageEntry)} → exit ${f0(t.exitPrice)} · ${t.fills} fill(s) · duration ${hours}h`,
+    `Entry ${f0(t.averageEntry)} → exit ${f0(t.exitPrice)} · ${t.fills} fill(s) · duration ${hours}h · reason: ${t.reason}`,
     `P&L ${pnl} (fees ${t.fees.toFixed(2)}$)`,
     '',
     `→ ${closeExplain(t.reason)}`,
@@ -137,14 +149,21 @@ export function eventMessage(symbol: string, e: JournalEntry, posContext?: strin
   const emoji = EVENT_EMOJI[e.type];
   if (!emoji) return null;
   const text = EVENT_TEXT[e.type];
+  // Variante : une RELÈVE de BE (profit_close) n'annule pas de DCA — c'est
+  // un resserrement du stop, pas un premier armement.
+  const isBeUpgrade = e.type === 'breakeven_enabled' && !!e.note?.includes('BE upgrade');
+  const title = isBeUpgrade ? 'BE RAISED' : text.title;
+  const explain = isBeUpgrade
+    ? 'Fee-covering stop RAISED higher (never loosened) — the trade locks in more as price closes better.'
+    : text.explain;
   const price = e.price !== undefined && e.price !== null ? ` @ ${f0(e.price)}` : '';
   const lines = [
-    `${emoji} ${text.title} · ${symbol}${price}`,
+    `${emoji} ${title} · ${symbol}${price}`,
     when(e.t),
   ];
   if (e.note) lines.push('', e.note);
   if (posContext) lines.push(posContext);
-  lines.push('', `→ ${text.explain}`);
+  lines.push('', `→ ${explain}`);
   return lines.join('\n');
 }
 

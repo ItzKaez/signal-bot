@@ -109,7 +109,7 @@ export class PairRunner {
     // Mode TEST : on avance par HEURE (au lieu du jour) pour émettre les
     // événements avec un contexte position à jour — POCs toujours injectés
     // à chaque frontière de jour UTC uniquement.
-    const stepSec = this.opts.testDays > 0 ? 3600 : 86400;
+    const stepSec = this.opts.testDays > 0 ? 900 : 86400;
     const firstBoundary = Math.floor(catchupStart / 86400) * 86400 + 86400;
     let injectedDay = -1;
     for (let t = firstBoundary; t <= nowSec + stepSec; t += stepSec) {
@@ -316,7 +316,7 @@ export class PairRunner {
 
 /** Événements qui parlent de la position OUVERTE (reçoivent le contexte). */
 const POSITION_EVENTS = new Set([
-  'dca_fill', 'breakeven_enabled', 'sl_wick', 'limits_cancelled',
+  'plan_activated', 'dca_fill', 'breakeven_enabled', 'sl_wick', 'limits_cancelled',
   'ladder_upgrade', 'ladder_downgrade', 'ladder_downgrade_late',
   'ladder_await_downgrade', 'reference_peak_moved', 'adverse_close',
 ]);
