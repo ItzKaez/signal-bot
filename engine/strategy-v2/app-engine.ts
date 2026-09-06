@@ -690,7 +690,11 @@ export class AppStrategyEngine {
         .map((lvl) => this.storePocMeta.get(lvl))
         .filter((m): m is { conc: number; tfSec: number } => m !== undefined);
       if (zoneMetas.length > 0) {
-        const zoneConc = zoneMetas.reduce((sum, m) => sum + m.conc, 0);
+        const zoneConc = this.config.pocZoneAgg === 'avg'
+          ? zoneMetas.reduce((sum, m) => sum + m.conc, 0) / zoneMetas.length
+          : this.config.pocZoneAgg === 'max'
+            ? Math.max(...zoneMetas.map((m) => m.conc))
+            : zoneMetas.reduce((sum, m) => sum + m.conc, 0);
         const bestConc = Math.max(...zoneMetas.map((m) => m.conc));
         if (zoneConc < this.config.minPocConcentration) {
           this.debug.plansRejected++;

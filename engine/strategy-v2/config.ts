@@ -151,6 +151,10 @@ export interface StrategyV2Config {
    *  1m/5m il faudra 30m déjà OB/OS (règle 5, ladderLowTfZoneGated) ET une
    *  zone à forte confluence de liquidité (gros volume POC). */
   ladderEntryTfCount: number;
+  /** Agrégation de la liquidité de ZONE (filtre minPocConcentration) :
+   *  'sum' = somme des concentrations du groupe (volume total de l'étagère),
+   *  'avg' = moyenne (densité typique), 'max' = le meilleur POC de la zone. */
+  pocZoneAgg: 'sum' | 'avg' | 'max';
   /** Cascade de DESCENTE activée ? false = aucune tentative de downgrade
    *  (règle 3 éteinte) : à l'invalidation, gestion normale (SL mèche selon
    *  wickStopMode, hard stop 2×AOI). La montée (règle 2) et la priorité
@@ -246,6 +250,7 @@ export function buildConfig(baseIntervalSeconds: number): StrategyV2Config {
     mtfLadderEnabled: false,
     ladderEntryTfCount: 2,
     ladderDowngradeEnabled: true,
+    pocZoneAgg: 'sum',
     maxRsiExtremity: 100,
     maxEntryLevels: 0,
   };
