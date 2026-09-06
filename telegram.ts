@@ -39,16 +39,30 @@ export class Telegram {
     try {
       while (this.queue.length > 0) {
         const msg = this.queue.shift()!;
-        try {
-          const res = await fetch(API(this.token!, 'sendMessage'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chat_id: msg.chatId, text: msg.text, disable_web_page_preview: true }),
-            signal: AbortSignal.timeout(15_000),
-          });
-          if (!res.ok) console.error(`[telegram] sendMessage HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
-        } catch (err) {
-          console.error('[telegram] send failed:', err instanceof Error ? err.message : err);
+        // Rate limit Telegram : ~20 msg/min vers un même chat — les rafales
+        // (mode TEST) prennent des 429 « retry after N ». On RESPECTE la
+        // pause demandée puis on RENVOIE le même message : rien n'est perdu.
+        for (let attempt = 0; attempt < 5; attempt++) {
+          try {
+            const res = await fetch(API(this.token!, 'sendMessage'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chat_id: msg.chatId, text: msg.text, disable_web_page_preview: true }),
+              signal: AbortSignal.timeout(15_000),
+            });
+            if (res.status === 429) {
+              const json = (await res.json().catch(() => null)) as { parameters?: { retry_after?: number } } | null;
+              const wait = (json?.parameters?.retry_after ?? 5) + 1;
+              console.warn(`[telegram] 429 Too Many Requests — pause ${wait}s (${this.queue.length} en file)`);
+              await new Promise((r) => setTimeout(r, wait * 1000));
+              continue;
+            }
+            if (!res.ok) console.error(`[telegram] sendMessage HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
+            break;
+          } catch (err) {
+            console.error('[telegram] send failed:', err instanceof Error ? err.message : err);
+            await new Promise((r) => setTimeout(r, 3000));
+          }
         }
         await new Promise((r) => setTimeout(r, 1100));
       }

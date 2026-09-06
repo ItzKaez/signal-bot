@@ -260,7 +260,7 @@ export class PairRunner {
       if (e.t < this.graceT || e.t <= this.lastSentT) continue;
       this.lastSentT = e.t;
       this.lastEventAt = e.t;
-      const msg = eventMessage(this.symbol, e);
+      const msg = eventMessage(this.symbol, e, this.opts.testDays > 0);
       if (msg) this.opts.telegram.send(msg);
     }
     this.lastJournalIdx = journal.length;

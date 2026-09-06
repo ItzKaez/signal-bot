@@ -55,13 +55,18 @@ const EVENT_EMOJI: Record<string, string> = {
   ladder_downgrade: '⬇️',
   ladder_downgrade_late: '⬇️',
   ladder_await_downgrade: 'ℹ️',
-  fill_check: '👈',
-  waiting_margin: '⏳',
 };
 
-/** Événement de journal → message (null = à ne pas envoyer). */
-export function eventMessage(symbol: string, e: JournalEntry): string | null {
+// Événements DIAGNOSTIQUES (purges de file, attentes) : utiles en live
+// (rarissimes), mais en rafale de mode TEST ce sont eux qui spamment et
+// déclenchent les 429 — silencés quand quiet=true.
+const QUIET_SKIP = new Set(['cancelled_unfilled', 'ladder_await_downgrade', 'waiting_margin']);
+
+/** Événement de journal → message (null = à ne pas envoyer).
+ *  quiet (mode TEST) : sans les événements de diagnostic. */
+export function eventMessage(symbol: string, e: JournalEntry, quiet = false): string | null {
   if (!(e.type in EVENT_EMOJI)) return null;
+  if (quiet && QUIET_SKIP.has(e.type)) return null;
   const head = `${EVENT_EMOJI[e.type]} ${symbol}`;
   const price = e.price !== undefined && e.price !== null ? ` @ ${f0(e.price)}` : '';
   const note = e.note ? `\n${e.note}` : '';
