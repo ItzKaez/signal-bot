@@ -294,7 +294,9 @@ export class PairRunner {
     if (journal.length < this.lastJournalIdx) this.lastJournalIdx = journal.length; // trim
     for (let i = this.lastJournalIdx; i < journal.length; i++) {
       const e = journal[i];
-      if (e.t < this.graceT || e.t <= this.lastSentT) continue;
+      // Plusieurs événements partagent le MÊME timestamp (TP1+TP2+BE sur la
+      // même bougie) : le garde strict '<=' ne laissait passer que le premier.
+      if (e.t < this.graceT || e.t < this.lastSentT) continue;
       this.lastSentT = e.t;
       this.lastEventAt = e.t;
       const msg = eventMessage(this.symbol, e, POSITION_EVENTS.has(e.type) ? posCtx : undefined);

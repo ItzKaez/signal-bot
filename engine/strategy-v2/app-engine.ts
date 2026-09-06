@@ -896,7 +896,11 @@ export class AppStrategyEngine {
   }
 
   /** Armement du SL mèche autorisé ? 'immediate' = V2 ; 'after_tp1' = seulement
-   *  après un TP touché ; 'off' = jamais (hard stop 2×AOI seul). */
+   *  après un TP touché ; 'off' = jamais (hard stop 2×AOI seul).
+   *  NB : la CONFIRMATION DE DIVERGENCE en loss arme le SL mèche SANS passer
+   *  par cette porte (règle utilisateur : protection immédiate à la div) —
+   *  cette politique ne régit plus que l'invalidation par cassure du peak
+   *  de référence. */
   private canArmWickStop(position: Position): boolean {
     if (this.config.wickStopMode === 'immediate') return true;
     if (this.config.wickStopMode === 'after_tp1') return position.nextTarget > 0;
@@ -1415,28 +1419,18 @@ export class AppStrategyEngine {
           position.protectiveStopFrom = now;
           this.cancelRemainingLimitsAtBe(now, plan, position);
           this.log(now, 'breakeven_enabled', position.breakevenLevel, undefined, `3 drives (div extreme still in zone, RSI ${position.lastDivEndRsi!.toFixed(1)}) · fully filled · stop at ${position.breakevenLevel.toFixed(1)} (active next candle)`);
-        } else if (!inProfit && (this.config.mtfLadderEnabled || this.canArmWickStop(position))) {
-          // En loss, même en 3 drives : SL sur la mèche adverse + BE dès
-          // qu'une clôture est en profit. La condition fullyFilled ne
-          // concerne que le BE immédiat — la protection, elle, ne doit
-          // jamais attendre. En LADDER la descente se tente SANS condition
-          // de TP (la politique after_tp1 ne règle que l'armement du wick).
+        } else if (!inProfit && this.config.wickStopMode !== 'off') {
+          // Div confirmée en LOSS (3 drives) : SL sur la mèche adverse
+          // TOUJOURS — la politique wickStopMode after_tp1 ne s'applique
+          // PAS à la confirmation de divergence (règle utilisateur : la
+          // protection ne doit jamais attendre un TP). BE dès qu'une
+          // clôture repasse en profit (bloc dédié ci-dessous). En LADDER
+          // avec cascade active, la descente se tente d'abord.
           if (!this.tryLadderDowngrade(position, now, candle.close)) {
-            if (this.canArmWickStop(position)) {
-              const wick = this.adverseWickStop(side, plan, position.referencePeakAt, average, now);
+            const wick = this.adverseWickStop(side, plan, position.referencePeakAt, average, now);
 position.wickStop = position.wickStop === null ? wick : (side === 'LONG' ? Math.max(position.wickStop, wick) : Math.min(position.wickStop, wick));
-              position.protectiveStopFrom = now;
-              this.log(now, 'sl_wick', wick, undefined, `3 drives confirmed at a loss · SL on adverse wick (${wick.toFixed(1)}) · active next candle · BE on first profitable close`);
-            } else {
-              // Invalidation sans candidat INFÉRIEUR dispo : la position
-              // reste vivante (hard stop 2×AOI en filet) et la descente
-              // se RE-TENTE à chaque bougie — le mouvement qui casse le TF
-              // surveillé forme justement de nouveaux peaks inférieurs.
-              if (this.ladderDowngradePossible(position)) {
-                position.ladderInvalidated = true;
-                this.log(now, 'ladder_await_downgrade', candle.close, undefined, 'invalidated at a loss · no lower setup available yet · watching for one (hard stop as backstop)');
-              }
-            }
+            position.protectiveStopFrom = now;
+            this.log(now, 'sl_wick', wick, undefined, `3 drives confirmed at a loss · SL on adverse wick (${wick.toFixed(1)}) · active next candle · BE on first profitable close`);
           }
         }
         // inProfit sans fullyFilled : on garde le stop courant — les DCA en
@@ -1450,21 +1444,15 @@ position.wickStop = position.wickStop === null ? wick : (side === 'LONG' ? Math.
         position.protectiveStopFrom = now;
         this.cancelRemainingLimitsAtBe(now, plan, position);
         this.log(now, 'breakeven_enabled', position.breakevenLevel, undefined, `final divergence confirmed in profit · stop at ${position.breakevenLevel.toFixed(1)}${position.breakevenLevel !== average ? ' (frais couverts)' : ' (moyenne)'} (active next candle)`);
-      } else if (this.config.mtfLadderEnabled || this.canArmWickStop(position)) {
-        // En loss : SL sur la mèche adverse depuis le peak de référence
-        // (cap 2×AOI de la moyenne).
+      } else if (this.config.wickStopMode !== 'off') {
+        // Div FINALE confirmée en LOSS : SL sur la mèche adverse TOUJOURS
+        // (cap 2×AOI de la moyenne) — pas de condition TP1 ici non plus.
+        // BE dès qu'une clôture repasse en profit.
         if (!this.tryLadderDowngrade(position, now, candle.close)) {
-          if (this.canArmWickStop(position)) {
-            const wick = this.adverseWickStop(side, plan, position.referencePeakAt, average, now);
+          const wick = this.adverseWickStop(side, plan, position.referencePeakAt, average, now);
 position.wickStop = position.wickStop === null ? wick : (side === 'LONG' ? Math.max(position.wickStop, wick) : Math.min(position.wickStop, wick));
-            position.protectiveStopFrom = now;
-            this.log(now, 'sl_wick', wick, undefined, `div confirmed at a loss · SL on adverse wick (${wick.toFixed(1)}) · active next candle · BE on first profitable close`);
-          } else {
-            if (this.ladderDowngradePossible(position)) {
-              position.ladderInvalidated = true;
-              this.log(now, 'ladder_await_downgrade', candle.close, undefined, 'div confirmed at a loss · no lower setup available yet · watching for one (hard stop as backstop)');
-            }
-          }
+          position.protectiveStopFrom = now;
+          this.log(now, 'sl_wick', wick, undefined, `div confirmed at a loss · SL on adverse wick (${wick.toFixed(1)}) · active next candle · BE on first profitable close`);
         }
       }
     }
