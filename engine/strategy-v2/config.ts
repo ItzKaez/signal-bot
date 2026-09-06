@@ -299,7 +299,12 @@ export function buildOptimizedConfig(baseIntervalSeconds: number): StrategyV2Con
     // Confluence liquidité : le POC d'entrée doit concentrer >=8% du volume
     // de SON profil de période (zone de liquidité dense). Validation IS+OOS
     // monotone : IS -2606->-1200$, OOS -2668->+1644$ PF 1.51 (74 trades).
-    minPocConcentration: 0.08,
+    minPocConcentration: 0.07,
+  // Sweep zone IS+OOS (16 runs) : avg@7% = les DEUX periodes positives
+  // (IS +2983\$/161t PF1.28 · OOS +25\$/194t) — l'etagere doit etre dense
+  // EN MOYENNE. Alternatives : sum@15% (+1660/+300, plus conservateur) ;
+  // sum@10% meilleur en IS (+3303) mais OOS -964\$ (overfit IS).
+  pocZoneAgg: 'avg',
     // Couverture news-candle et filtre EWMA : TESTÉS ET ÉCARTÉS du preset
     // (IS 2023-24 : -2606 → -3045 $, PF 0.56 → 0.48 · OOS 2025-26 :
     // -2668 → -2815 $, PF 0.82 → 0.76 — le gain de drawdown ne compense

@@ -52,7 +52,8 @@ const DEFAULT_OVERRIDE: Record<string, unknown> = {
   maxConcurrentPositions: 1,
   feeModel: 'maker_taker',
   minAoiFloorPct: 0.003,
-  minPocConcentration: 0.08,
+  minPocConcentration: 0.07,
+  pocZoneAgg: 'avg',
   maxLeverage: 10,
 };
 let override = DEFAULT_OVERRIDE;
