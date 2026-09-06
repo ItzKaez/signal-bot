@@ -1066,6 +1066,7 @@ export class AppStrategyEngine {
    *  (le trade continue), false = aucun candidat → SL mèche comme d'habitude. */
   private tryLadderDowngrade(position: Position, now: number, price: number): boolean {
     if (!this.config.mtfLadderEnabled) return false;
+    if (!this.config.ladderDowngradeEnabled) return false;
     if (position.ladderFrozen) return false;
     const fullyFilled = position.filledLevels.size >= position.plan.entryLevels.length || position.limitsCancelled;
     if (fullyFilled) { position.ladderFrozen = true; return false; }
@@ -1077,6 +1078,17 @@ export class AppStrategyEngine {
     this.pending = this.pending.filter((p2) => p2 !== down.plan);
     this.ladderSwitchRef(position, down.plan, now, 'downgrade', price);
     return true;
+  }
+
+  /** Une descente est-elle POSSIBLE pour ce setup surveillé ? Il faut la
+   *  cascade activée ET au moins un TF d'exécution sous le TF surveillé —
+   *  sinon l'« attente de descente » n'aurait aucun sens (rien ne peut
+   *  jamais venir) : gestion normale à l'invalidation. */
+  private ladderDowngradePossible(position: Position): boolean {
+    if (!this.config.mtfLadderEnabled || !this.config.ladderDowngradeEnabled) return false;
+    const tfsDesc = ladderTfs(this.config.executionSeconds);
+    const refSec = (position.ladderRef ?? position.plan).executionSeconds;
+    return tfsDesc[tfsDesc.length - 1] < refSec;
   }
 
   /** LADDER règle 5 : un setup des DEUX TF les plus bas (1m/5m) ne peut être
@@ -1420,8 +1432,10 @@ position.wickStop = position.wickStop === null ? wick : (side === 'LONG' ? Math.
               // reste vivante (hard stop 2×AOI en filet) et la descente
               // se RE-TENTE à chaque bougie — le mouvement qui casse le TF
               // surveillé forme justement de nouveaux peaks inférieurs.
-              position.ladderInvalidated = true;
-              this.log(now, 'ladder_await_downgrade', candle.close, undefined, 'invalidated at a loss · no lower setup available yet · watching for one (hard stop as backstop)');
+              if (this.ladderDowngradePossible(position)) {
+                position.ladderInvalidated = true;
+                this.log(now, 'ladder_await_downgrade', candle.close, undefined, 'invalidated at a loss · no lower setup available yet · watching for one (hard stop as backstop)');
+              }
             }
           }
         }
@@ -1443,8 +1457,10 @@ position.wickStop = position.wickStop === null ? wick : (side === 'LONG' ? Math.
             position.protectiveStopFrom = now;
             this.log(now, 'sl_wick', wick, undefined, `div confirmed at a loss · SL on adverse wick (${wick.toFixed(1)}) · active next candle · BE on first profitable close`);
           } else {
-            position.ladderInvalidated = true;
-            this.log(now, 'ladder_await_downgrade', candle.close, undefined, 'div confirmed at a loss · no lower setup available yet · watching for one (hard stop as backstop)');
+            if (this.ladderDowngradePossible(position)) {
+              position.ladderInvalidated = true;
+              this.log(now, 'ladder_await_downgrade', candle.close, undefined, 'div confirmed at a loss · no lower setup available yet · watching for one (hard stop as backstop)');
+            }
           }
         }
       }
@@ -1500,8 +1516,10 @@ position.wickStop = position.wickStop === null ? wick : (side === 'LONG' ? Math.
           position.protectiveStopFrom = now;
           this.log(now, 'sl_wick', wick, undefined, `reference peak broken (${invalidation.reason}) · SL on wick (${wick.toFixed(1)}) · active next candle · BE on first profitable close`);
         } else {
-          position.ladderInvalidated = true;
-          this.log(now, 'ladder_await_downgrade', candle.close, undefined, `reference peak broken (${invalidation.reason}) · no lower setup available yet · watching for one (hard stop as backstop)`);
+          if (this.ladderDowngradePossible(position)) {
+            position.ladderInvalidated = true;
+            this.log(now, 'ladder_await_downgrade', candle.close, undefined, `reference peak broken (${invalidation.reason}) · no lower setup available yet · watching for one (hard stop as backstop)`);
+          }
         }
       }
     }

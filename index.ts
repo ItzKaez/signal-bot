@@ -42,6 +42,7 @@ const TEST_DAYS = Number(env.TEST_DAYS ?? 0);
 const DEFAULT_OVERRIDE: Record<string, unknown> = {
   mtfLadderEnabled: true,
   ladderEntryTfCount: 2,
+  ladderDowngradeEnabled: false,
   executionSeconds: [900, 1800],
   limitExpiryBars: 375, // 6,25 h en bougies 1m (parité avec la validation)
   breakevenCoverFees: true,

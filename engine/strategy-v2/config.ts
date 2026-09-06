@@ -151,6 +151,11 @@ export interface StrategyV2Config {
    *  1m/5m il faudra 30m déjà OB/OS (règle 5, ladderLowTfZoneGated) ET une
    *  zone à forte confluence de liquidité (gros volume POC). */
   ladderEntryTfCount: number;
+  /** Cascade de DESCENTE activée ? false = aucune tentative de downgrade
+   *  (règle 3 éteinte) : à l'invalidation, gestion normale (SL mèche selon
+   *  wickStopMode, hard stop 2×AOI). La montée (règle 2) et la priorité
+   *  au TF le plus haut (règle 1) restent actives. */
+  ladderDowngradeEnabled: boolean;
   /** COUVERTURE NEWS-CANDLE : l'AOI est étendue pour couvrir la plus
    *  grosse bougie des aoiNewsCoverBars dernières (k× sa range en %).
    *  C'est la version RELATIVE du plancher : un spike de news au milieu
@@ -240,6 +245,7 @@ export function buildConfig(baseIntervalSeconds: number): StrategyV2Config {
     minPocTfSec: 0,
     mtfLadderEnabled: false,
     ladderEntryTfCount: 2,
+    ladderDowngradeEnabled: true,
     maxRsiExtremity: 100,
     maxEntryLevels: 0,
   };
